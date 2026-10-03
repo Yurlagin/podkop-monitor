@@ -27,9 +27,15 @@
 Замеры серверов подписки идут через отдельный вспомогательный sing-box (только `127.0.0.1`, трафик не проксирует)
 и не влияют на автовыбор podkop.
 
+## Совместимость
+
+Проверено **только на OpenWrt 24.10** (opkg, LuCI 24.10) с podkop 0.7.22 и sing-box 1.12.
+На OpenWrt 25.x (пакетный менеджер apk) **не работает**: пакет собирается только в формате `.ipk`.
+На других версиях OpenWrt, podkop и sing-box работа не проверялась.
+
 ## Установка
 
-Нужны OpenWrt 24.x (opkg) и установленный podkop.
+Нужны OpenWrt 24.10 (opkg) и установленный podkop.
 
 ```sh
 wget -O /tmp/install.sh https://github.com/Yurlagin/podkop-monitor/releases/latest/download/install.sh && sh /tmp/install.sh
