@@ -32,28 +32,28 @@
 Секции podkop: история за 24 часа, текущая задержка, доступность, какой сервер выбран автовыбором.
 Отметка «изменён в подписке ↻» — провайдер поменял параметры сервера; нажатие показывает отличия и заменяет ссылку.
 
-![Мониторинг секций podkop](docs/screenshots/monitoring.png)
+<img src="docs/screenshots/monitoring.png" alt="Мониторинг секций podkop" width="1200">
 
 График задержек по серверам секции:
 
-![График](docs/screenshots/chart.png)
+<img src="docs/screenshots/chart.png" alt="График" width="960">
 
 Все серверы подписки: сортировка по клику на заголовок, под именем — секции, где сервер уже стоит,
 галочки и «Добавить выбранные в секцию…».
 
-![Все серверы подписки](docs/screenshots/subscription.png)
+<img src="docs/screenshots/subscription.png" alt="Все серверы подписки" width="960">
 
 Добавление в секцию с подсказками (для YouTube — будет ли реклама), обновление ссылок из подписки и удаление серверов:
 
-![Добавление в секцию](docs/screenshots/add-to-section.png)
+<img src="docs/screenshots/add-to-section.png" alt="Добавление в секцию" width="604">
 
-![Обновление из подписки](docs/screenshots/update-from-subscription.png)
+<img src="docs/screenshots/update-from-subscription.png" alt="Обновление из подписки" width="604">
 
-![Удаление из секции](docs/screenshots/remove.png)
+<img src="docs/screenshots/remove.png" alt="Удаление из секции" width="604">
 
 Настройки:
 
-![Настройки](docs/screenshots/settings.png)
+<img src="docs/screenshots/settings.png" alt="Настройки" width="960">
 
 *Адреса серверов на скриншотах заменены на example.com.*
 
@@ -76,7 +76,7 @@
    ```
    и нажмите **OK**.
 
-   ![Установка через LuCI](docs/screenshots/install-luci.png)
+   <img src="docs/screenshots/install-luci.png" alt="Установка через LuCI" width="960">
 3. LuCI предупредит, что пакет не из официального репозитория (*Installing packages from untrusted sources…*) —
    нажмите **Install**.
 4. Обновите страницу (если пункт меню не появился — выйдите из LuCI и войдите снова).
