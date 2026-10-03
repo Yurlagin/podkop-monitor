@@ -1,0 +1,9 @@
+#!/bin/sh
+[ -n "$IPKG_INSTROOT" ] && exit 0
+rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache
+/etc/init.d/rpcd reload
+/etc/init.d/podkop-monitor enable
+/etc/init.d/podkop-monitor restart
+# первая проверка и проверка обновлений — в фоне, не задерживая установку
+( sleep 5; /usr/bin/podkop-monitor check; /usr/bin/podkop-monitor update-check ) </dev/null >/dev/null 2>&1 &
+exit 0

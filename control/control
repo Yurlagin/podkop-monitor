@@ -1,0 +1,10 @@
+Package: podkop-monitor
+Version: @VERSION@
+Depends: libc, podkop, sing-box, jq, curl, coreutils-base64
+Source: https://github.com/@REPO@
+License: MIT
+Section: luci
+Architecture: all
+Installed-Size: @SIZE@
+Description: Мониторинг доступности серверов podkop и подписки VPN-провайдера.
+ Страница в LuCI: Services → Podkop Monitor.

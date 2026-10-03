@@ -1,0 +1,30 @@
+{
+	"admin/services/podkop-monitor": {
+		"title": "Podkop Monitor",
+		"order": 43,
+		"action": {
+			"type": "alias",
+			"path": "admin/services/podkop-monitor/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-podkop-monitor" ],
+			"uci": { "podkop-monitor": true }
+		}
+	},
+	"admin/services/podkop-monitor/status": {
+		"title": "Мониторинг",
+		"order": 1,
+		"action": {
+			"type": "view",
+			"path": "podkop-monitor/status"
+		}
+	},
+	"admin/services/podkop-monitor/settings": {
+		"title": "Настройки",
+		"order": 2,
+		"action": {
+			"type": "view",
+			"path": "podkop-monitor/settings"
+		}
+	}
+}

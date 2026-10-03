@@ -1,0 +1,25 @@
+
+config main 'main'
+	option enabled '1'
+	# период замеров, минут
+	option interval '15'
+	# сколько дней хранить историю
+	option keep_days '7'
+	# ссылка на подписку VPN-провайдера (Xray-JSON или список ссылок); пусто — только секции podkop
+	option subscription_url ''
+	option subscription_ua 'v2rayNG/1.9.30'
+	# проверять страну, которую видит YouTube (раз в сутки)
+	option youtube_country '1'
+	# проверять обновления пакета (раз в сутки)
+	option update_check '1'
+	option repo '@REPO@'
+	# автообновление ссылок в секциях podkop по подписке: off | outdated (только неработающие) | all
+	option auto_update 'off'
+	# list auto_update_exclude '🇷🇺Moscow'   — серверы, которые не обновлять автоматически
+	# вспомогательный sing-box: порт Clash API и начальный порт mixed-входов
+	option helper_port '9092'
+	option base_port '32000'
+	# сколько серверов подписки проверять одновременно
+	option parallel '8'
+	# таймаут одной проверки, мс
+	option timeout '5000'

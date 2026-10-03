@@ -1,0 +1,29 @@
+name: release
+
+# Релиз по тегу vX.Y.Z: собирает .ipk и публикует его вместе с install.sh.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия совпадает с тегом
+        run: |
+          [ "v$(cat VERSION)" = "$GITHUB_REF_NAME" ] || { echo "VERSION=$(cat VERSION), тег $GITHUB_REF_NAME"; exit 1; }
+
+      - name: Сборка
+        run: |
+          ./build.sh "$GITHUB_REPOSITORY"
+          sed "s#@REPO@#$GITHUB_REPOSITORY#g" install.sh > dist/install.sh
+
+      - name: Релиз
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.ipk dist/install.sh --title "$GITHUB_REF_NAME" --generate-notes

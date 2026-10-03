@@ -1,0 +1,6 @@
+#!/bin/sh
+[ -n "$IPKG_INSTROOT" ] && exit 0
+/etc/init.d/podkop-monitor stop
+[ -f /etc/crontabs/root ] && sed -i '/# podkop-monitor$/d' /etc/crontabs/root && /etc/init.d/cron reload
+[ "$PKG_UPGRADE" = 1 ] || /etc/init.d/podkop-monitor disable
+exit 0

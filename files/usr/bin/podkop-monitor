@@ -1,0 +1,54 @@
+#!/bin/sh
+# podkop-monitor — мониторинг доступности серверов podkop и подписки.
+
+L=/usr/libexec/podkop-monitor
+
+case "$1" in
+    check)        exec $L/check.sh ;;
+    sub-update)
+        # обновить список серверов подписки и сразу проверить для них страну YouTube
+        $L/sub-update.sh; rc=$?
+        sleep 5
+        $L/country.sh
+        exit $rc
+        ;;
+    country)      exec $L/country.sh ;;
+    update-check) exec $L/update.sh check ;;
+    apply|remove|add)
+        # правка секции podkop: <секция> <имя сервера>...
+        exec $L/edit.sh "$@" ;;
+    upgrade)      exec $L/update.sh upgrade ;;
+    daily)
+        # раз в сутки: подписка → страна YouTube → проверка обновлений пакета
+        . $L/common.sh
+        $0 sub-update
+        [ "$PM_UPDATE_CHECK" = 1 ] && $L/update.sh check
+        exit 0
+        ;;
+    version)      cat $L/VERSION ;;
+    bg)
+        # для LuCI: запустить длинную команду в фоне; результат — /tmp/podkop-monitor/<cmd>.log и .rc
+        case "$2" in check|sub-update|upgrade|apply|remove|add) ;; *) echo "bg: check|sub-update|upgrade|apply|remove|add"; exit 1 ;; esac
+        R=/tmp/podkop-monitor; mkdir -p $R; rm -f $R/$2.rc
+        C=$2; shift 2
+        ( $0 "$C" "$@" > $R/$C.log 2>&1; echo $? > $R/$C.rc ) </dev/null >/dev/null 2>&1 &
+        exit 0
+        ;;
+    *)
+        cat <<EOF
+Использование: podkop-monitor <команда>
+  check         прогон замеров (cron, раз в interval минут)
+  sub-update    обновить список серверов подписки (+ страна YouTube)
+  country       проверить страну YouTube через серверы подписки
+  daily         sub-update + country + update-check (cron, раз в сутки)
+  update-check  проверить наличие новой версии
+  upgrade       установить новую версию
+  apply  <секция> <имя>...  заменить ссылки серверов в секции podkop ссылками из подписки
+  remove <секция> <имя>...  убрать серверы из секции podkop
+  add    <секция> <имя>...  добавить серверы подписки в секцию podkop
+  version       показать версию
+  bg <cmd> ...  запустить команду в фоне (для LuCI): результат в /tmp/podkop-monitor/<cmd>.log/.rc
+EOF
+        exit 1
+        ;;
+esac

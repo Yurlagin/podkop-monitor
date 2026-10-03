@@ -1,0 +1,16 @@
+{
+	"luci-app-podkop-monitor": {
+		"description": "Доступ LuCI к podkop-monitor",
+		"read": {
+			"file": {
+				"/tmp/podkop-monitor/*": [ "read" ],
+				"/usr/libexec/podkop-monitor/VERSION": [ "read" ],
+				"/usr/bin/podkop-monitor": [ "exec" ]
+			},
+			"uci": [ "podkop-monitor", "podkop" ]
+		},
+		"write": {
+			"uci": [ "podkop-monitor" ]
+		}
+	}
+}

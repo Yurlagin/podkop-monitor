@@ -1,0 +1,9 @@
+#!/bin/sh
+[ -n "$IPKG_INSTROOT" ] && exit 0
+[ "$PKG_UPGRADE" = 1 ] && exit 0
+# Данные (в т.ч. конфиг с ключами серверов подписки) убираем, только если пакет действительно удалён:
+# при переустановке (--force-reinstall) он сразу ставится обратно — тогда историю не трогаем.
+( sleep 60
+  [ -f /usr/lib/opkg/info/podkop-monitor.control ] || rm -rf /etc/podkop-monitor /tmp/podkop-monitor
+) </dev/null >/dev/null 2>&1 &
+exit 0
