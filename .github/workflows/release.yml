@@ -21,6 +21,8 @@ jobs:
       - name: Сборка
         run: |
           ./build.sh "$GITHUB_REPOSITORY"
+          # копия с постоянным именем — для ссылки .../releases/latest/download/podkop-monitor_all.ipk
+          cp dist/podkop-monitor_*_all.ipk dist/podkop-monitor_all.ipk
           sed "s#@REPO@#$GITHUB_REPOSITORY#g" install.sh > dist/install.sh
 
       - name: Релиз

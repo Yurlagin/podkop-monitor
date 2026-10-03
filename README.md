@@ -37,13 +37,38 @@
 
 Нужны OpenWrt 24.10 (opkg) и установленный podkop.
 
+### Через LuCI
+
+1. Откройте **System → Software** (Система → Программное обеспечение).
+2. В поле **Download and install package** (Загрузить и установить пакет) вставьте ссылку на последнюю версию:
+   ```
+   https://github.com/Yurlagin/podkop-monitor/releases/latest/download/podkop-monitor_all.ipk
+   ```
+   и нажмите **OK**.
+3. LuCI предупредит, что пакет не из официального репозитория (*Installing packages from untrusted sources…*) —
+   нажмите **Install**.
+4. Обновите страницу (если пункт меню не появился — выйдите из LuCI и войдите снова).
+   Мониторинг появится в **Services → Podkop Monitor**.
+
+Если роутер не может скачать файл по ссылке, скачайте `podkop-monitor_all.ipk` со страницы [релизов](../../releases/latest)
+на компьютер и загрузите его в том же разделе кнопкой **Upload Package…** (Загрузить пакет…).
+
+Если LuCI сообщит о недостающих зависимостях (`podkop`, `sing-box`, `jq`, `curl`, `coreutils-base64`), нажмите
+**Update lists…** и повторите установку. Обычно они уже стоят вместе с podkop.
+
+Обновлять дальше можно прямо со страницы мониторинга — кнопкой «Обновить», когда выйдет новая версия.
+
+### Через SSH
+
 ```sh
 wget -O /tmp/install.sh https://github.com/Yurlagin/podkop-monitor/releases/latest/download/install.sh && sh /tmp/install.sh
 ```
 
-Или вручную: скачать `.ipk` из [релизов](../../releases) и `opkg install podkop-monitor_*.ipk`.
+Или вручную: `opkg install https://github.com/Yurlagin/podkop-monitor/releases/latest/download/podkop-monitor_all.ipk`.
 
-Затем в LuCI → Services → Podkop Monitor → **Настройки** вставить ссылку на подписку (ту же, что в Happ / v2rayN /
+### После установки
+
+В LuCI → Services → Podkop Monitor → **Настройки** вставьте ссылку на подписку (ту же, что в Happ / v2rayN /
 Hiddify). Поддерживаются Xray-JSON (Remnawave и т.п.) и обычный список ссылок `vless://`, `hy2://`, `trojan://`, `ss://`.
 XHTTP-серверы пропускаются — sing-box их не поддерживает.
 
