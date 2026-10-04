@@ -3,7 +3,11 @@
 # а в podkop остаётся старая ссылка. Результат: $PM_RUN/drift.csv
 #   section,key,name,status,fields
 #   status: same — совпадает; differs — отличается; missing — в подписке нет;
-#           unsupported — есть в подписке, но мониторинг не может его проверить (fields — причина)
+#           unsupported — есть в подписке, но мониторинг не может его проверить (fields — причина);
+#           renamed — под этим именем в подписке нет, но есть сервер с теми же параметрами подключения
+#                     (провайдер его переименовал); fields — «имя|старое|новое» для каждого кандидата
+#   Для missing в fields может быть подсказка «похож|имя|что отличается» — тот же адрес, другие параметры,
+#   или «дубль|имя|» — такой же сервер уже стоит в этой секции под другим именем.
 #   fields: «поле|было|стало» через «;» (для UUID/пароля и ключа значения не пишем)
 # Сравниваются только параметры подключения. Не сравниваются: отпечаток (utls) и ALPN — их часто меняют сознательно;
 # short id Reality — подписка выдаёт случайный из списка, который принимает сервер, при каждом запросе свой.
@@ -62,19 +66,35 @@ jq -rn --slurpfile pk $TMP.podkop --slurpfile nm $TMP.names --slurpfile sb "$PM_
       "транспорт": (.transport.type // "tcp"), "путь": (.transport.path // ""),
       "host": (.transport.headers.Host // "")
     };
+  def clean: tostring | split(",") | join(" ") | split(";") | join(" ") | split("|") | join(" ");
+  # что отличается: «поле|было|стало»; UUID и ключ — без значений
+  def diff($a; $b): [ $a | keys_unsorted[] | select($a[.] != $b[.])
+      | if IN("UUID/пароль", "ключ Reality") then "\(.)||" else "\(.)|\($a[.] | clean)|\($b[.] | clean)" end ];
   ($sb[0].outbounds | map({ (.tag): . }) | add) as $obs
+  | ($nm | map({ name, n: ($obs[.tag] | norm) })) as $subs
   | ($nm | map({ (.name): $obs[.tag] }) | add // {}) as $byname
   | $pk[]
   | . as $p
+  | ($p.ob | norm) as $a
   | $byname[$p.name] as $s
-  | ($sk | map(select(.name == $p.name)) | first) as $skip
-  | if $s == null and $skip then [$p.sec, $p.key, $p.name, "unsupported", $skip.why]
-    elif $s == null then [$p.sec, $p.key, $p.name, "missing", ""]
-    else ($p.ob | norm) as $a | ($s | norm) as $b
-      | [ $a | keys_unsorted[] | select($a[.] != $b[.])
-          | if IN("UUID/пароль", "ключ Reality") then "\(.)||"
-            else "\(.)|\($a[.] | tostring | split(",") | join(" ") | split(";") | join(" "))|\($b[.] | tostring | split(",") | join(" ") | split(";") | join(" "))" end
-        ] as $diff
-      | [$p.sec, $p.key, $p.name, (if ($diff | length) == 0 then "same" else "differs" end), ($diff | join(";"))]
+  | ([ $sk[] | select(.name == $p.name) ] | .[0]) as $skip
+  | if $s == null and $skip != null then [$p.sec, $p.key, $p.name, "unsupported", $skip.why]
+    elif $s == null then
+      # имена, которые уже стоят в этой секции, — не кандидаты (это дубль, а не переименование)
+      ([ $pk[] | select(.sec == $p.sec) | .name ]) as $taken
+      | [ $subs[] | select(.n == $a) | .name ] as $sameall
+      | [ $sameall[] | . as $x | select($taken | index($x) | not) ] as $same
+      | if ($same | length) > 0 then
+          [$p.sec, $p.key, $p.name, "renamed", ($same | map("имя|\($p.name | clean)|\(clean)") | join(";"))]
+        elif ($sameall | length) > 0 then
+          [$p.sec, $p.key, $p.name, "missing", ($sameall | map("дубль|\(clean)|") | join(";"))]
+        else
+          [ $subs[] | select(.n["адрес"] == $a["адрес"] and .n["порт"] == $a["порт"])
+            | "похож|\(.name | clean)|\(diff($a; .n) | map(split("|")[0]) | join(" "))" ] as $like
+          | [$p.sec, $p.key, $p.name, "missing", ($like | .[0:3] | join(";"))]
+        end
+    else
+      diff($a; $s | norm) as $d
+      | [$p.sec, $p.key, $p.name, (if ($d | length) == 0 then "same" else "differs" end), ($d | join(";"))]
     end
   | join(",")' > $TMP.out && mv $TMP.out "$OUT"

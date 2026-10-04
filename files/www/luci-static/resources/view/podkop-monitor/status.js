@@ -50,6 +50,7 @@ const CSS = `
 .pm-tag.pm-gray { opacity: .55; }
 .pm-fix { cursor: pointer; }
 .pm-fix:hover { text-decoration: underline; }
+.pm-tag.pm-ren { color: ${PALETTE[0]}; opacity: 1; font-weight: 600; }
 .pm-diff td, .pm-diff th { padding: 4px 10px 4px 0; text-align: left; vertical-align: top; }
 .pm-diff .old { opacity: .6; text-decoration: line-through; }
 .pm-t td.pm-cb, .pm-t th.pm-cb { width: 22px; min-width: 22px; max-width: 22px; padding-right: 0; text-align: left; }
@@ -227,6 +228,19 @@ return view.extend({
 		if (!d || d.status === 'same') return '';
 		if (d.status === 'unsupported')
 			return `<span class="pm-tag pm-gray" title="Есть в подписке, но мониторинг не может его проверить: ${esc(d.fields.map(f => f.field).join(', '))}">не поддерживается</span>`;
+		if (d.status === 'renamed') {
+			const to = d.fields.map(f => f.to);
+			return `<span class="pm-tag pm-fix pm-ren" data-kind="ren" data-name="${esc(sv.name)}" title="${esc(
+				`Под этим именем в подписке сервера нет, но ${to.length > 1 ? 'есть серверы' : 'есть сервер'} с теми же параметрами подключения: ${to.join(', ')}. Провайдер переименовал сервер. Нажмите, чтобы сменить имя в podkop (параметры не меняются, история переносится).`
+			)}">${to.length > 1 ? 'переименован? ↻' : 'переименован в ' + esc(to[0]) + ' ↻'}</span>`;
+		}
+		if (d.status === 'missing' && d.fields[0]?.field === 'дубль')
+			return `<span class="pm-tag pm-gray" title="${esc('Такой же сервер (те же параметры подключения) уже стоит в этой секции под именем ' + d.fields.map(f => f.from).join(', ') + '. Эту ссылку можно удалить.')}">дубль ${esc(d.fields[0].from)}</span>`;
+		if (d.status === 'missing' && d.fields.length) {
+			const like = d.fields.map(f => `${f.from} (отличается: ${f.to || '—'})`).join('; ');
+			return '<span class="pm-tag pm-gray" title="Сервера с таким именем нет в подписке: ссылка своя, переименована или сервер удалён">нет в подписке</span>' +
+				`<span class="pm-tag pm-gray" title="${esc('Тот же адрес, но другие параметры подключения — это не переименование. ' + like)}">похож на ${esc(d.fields[0].from)}</span>`;
+		}
 		if (d.status === 'missing')
 			return '<span class="pm-tag pm-gray" title="Сервера с таким именем нет в подписке: ссылка своя, переименована или сервер удалён">нет в подписке</span>';
 		const what = 'Отличается от подписки: ' + d.fields.map(f => f.field).join(', ');
@@ -241,7 +255,40 @@ return view.extend({
 
 	// серверы секции с расхождением: [{ name, d }]
 	driftList(sec) {
-		return Object.values(this.drift[sec] || {}).filter(d => d.status === 'differs').map(d => ({ name: d.name, d }));
+		return Object.values(this.drift[sec] || {})
+			.filter(d => d.status === 'differs' || (d.status === 'renamed' && d.fields.length === 1))
+			.map(d => ({ name: d.name, d }));
+	},
+
+	// запустить apply и/или rename для секции одной командой (один перезапуск podkop)
+	runEdit(sec, apply, renames, title) {
+		if (apply.length && renames.length)
+			return this.runBg('sync', title, false, [sec].concat(apply, ['--'], renames.flat()));
+		if (renames.length)
+			return this.runBg('rename', title, false, [sec].concat(renames.flat()));
+		return this.runBg('apply', title, false, [sec].concat(apply));
+	},
+
+	confirmRename(sec, name) {
+		const d = Object.values(this.drift[sec] || {}).find(x => x.name === name);
+		if (!d) return;
+		const to = d.fields.map(f => f.to);
+		const radios = to.map((n, i) => E('input', { 'type': 'radio', 'name': 'pm-ren', 'value': n, 'checked': i === 0 ? '' : null }));
+		ui.showModal(`Переименовать «${name}» в секции ${sec}?`, [
+			E('p', {}, to.length > 1
+				? 'В подписке несколько серверов с теми же параметрами подключения. Выберите новое имя:'
+				: 'В подписке этот сервер теперь называется:'),
+			E('ul', { 'class': 'pm-pick' }, to.map((n, i) => E('li', {}, E('label', {}, [radios[i], E('strong', {}, n)])))),
+			E('p', { 'class': 'pm-muted' }, 'Параметры подключения совпадают — в ссылке podkop меняется только имя, ваши правки ссылки сохранятся. ' +
+				'История замеров перенесётся на новое имя. ' + this.PODKOP_NOTE),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, 'Отмена'), ' ',
+				E('button', { 'class': 'cbi-button cbi-button-positive', 'click': () => {
+					const pick = radios.find(r => r.checked)?.value || to[0];
+					this.runEdit(sec, [], [[name, pick]], `Переименование «${name}»`);
+				} }, 'Переименовать')
+			])
+		]);
 	},
 
 	diffTable(d) {
@@ -276,9 +323,17 @@ return view.extend({
 	confirmApplyAll(sec) {
 		const list = this.driftList(sec);
 		this.pickDialog(`Обновить серверы секции ${sec} из подписки`,
-			'Ссылки отмеченных серверов будут заменены ссылками из подписки. Снимите галочку с тех, что вы меняли намеренно (например, SNI) — их правки пропадут.',
-			list.map(({ name, d }) => ({ name, detail: d.fields.map(f => f.from ? `${f.field}: ${f.from} → ${f.to}` : `${f.field}: изменён`).join('; ') })),
-			'Обновить', names => this.runBg('apply', `Обновление секции ${sec}`, false, [sec].concat(names)));
+			'Ссылки отмеченных серверов будут заменены ссылками из подписки, переименованные — получат новое имя (параметры у них не меняются, история переносится). ' +
+				'Снимите галочку с тех, что вы меняли намеренно (например, SNI) — их правки пропадут.',
+			list.map(({ name, d }) => ({ name, detail: d.status === 'renamed'
+				? `переименовать в ${d.fields[0].to}`
+				: d.fields.map(f => f.from ? `${f.field}: ${f.from} → ${f.to}` : `${f.field}: изменён`).join('; ') })),
+			'Обновить', names => {
+				const byName = Object.fromEntries(list.map(x => [x.name, x.d]));
+				const apply = names.filter(n => byName[n].status === 'differs');
+				const renames = names.filter(n => byName[n].status === 'renamed').map(n => [n, byName[n].fields[0].to]);
+				this.runEdit(sec, apply, renames, `Обновление секции ${sec}`);
+			});
 	},
 
 	confirmRemove(sec, s) {
@@ -343,7 +398,8 @@ return view.extend({
 
 		const card = E('div', { 'class': 'pm-card' });
 		card.innerHTML = html;
-		card.querySelectorAll('.pm-fix').forEach(el => el.addEventListener('click', () => this.confirmApply(sec, el.dataset.name)));
+		card.querySelectorAll('.pm-fix').forEach(el => el.addEventListener('click', () =>
+			el.dataset.kind === 'ren' ? this.confirmRename(sec, el.dataset.name) : this.confirmApply(sec, el.dataset.name)));
 
 		// действия над секцией
 		const drifted = this.driftList(sec).length;
@@ -410,9 +466,15 @@ return view.extend({
 
 	// секции podkop, где сейчас стоит сервер с таким именем
 	sectionsOf(name) {
-		return Object.entries(this.data)
+		const out = Object.entries(this.data)
 			.filter(([sec, d]) => sec !== SUB && d.servers[name] && d.servers[name].lastTs >= d.lastTs)
 			.map(([sec]) => sec);
+		// тот же сервер стоит в секции под старым именем (провайдер переименовал)
+		for (const [sec, ds] of Object.entries(this.drift || {}))
+			for (const d of Object.values(ds))
+				if (d.status === 'renamed' && d.fields.some(f => f.to === name) && !out.includes(sec))
+					out.push(`${sec} (как ${d.name})`);
+		return out;
 	},
 
 	// подсказка о сервере подписки для выбранной секции
@@ -434,7 +496,7 @@ return view.extend({
 	confirmAdd(sec) {
 		const s = this.data[SUB];
 		const names = [...(this.sel[SUB] || [])];
-		const already = names.filter(n => this.sectionsOf(n).includes(sec));
+		const already = names.filter(n => this.sectionsOf(n).some(x => x === sec || x.startsWith(sec + ' (')));  // в т.ч. под старым именем
 		const items = names.filter(n => !already.includes(n)).map(name => {
 			const sv = s.servers[name];
 			const hint = this.addHint(sec, sv);

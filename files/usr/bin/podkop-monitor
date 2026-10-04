@@ -14,7 +14,7 @@ case "$1" in
         ;;
     country)      exec $L/country.sh ;;
     update-check) exec $L/update.sh check ;;
-    apply|remove|add)
+    apply|remove|add|rename|sync)
         # правка секции podkop: <секция> <имя сервера>...
         exec $L/edit.sh "$@" ;;
     upgrade)      exec $L/update.sh upgrade ;;
@@ -28,7 +28,7 @@ case "$1" in
     version)      cat $L/VERSION ;;
     bg)
         # для LuCI: запустить длинную команду в фоне; результат — /tmp/podkop-monitor/<cmd>.log и .rc
-        case "$2" in check|sub-update|upgrade|apply|remove|add) ;; *) echo "bg: check|sub-update|upgrade|apply|remove|add"; exit 1 ;; esac
+        case "$2" in check|sub-update|upgrade|apply|remove|add|rename|sync) ;; *) echo "bg: check|sub-update|upgrade|apply|remove|add|rename|sync"; exit 1 ;; esac
         R=/tmp/podkop-monitor; mkdir -p $R; rm -f $R/$2.rc
         C=$2; shift 2
         ( $0 "$C" "$@" > $R/$C.log 2>&1; echo $? > $R/$C.rc ) </dev/null >/dev/null 2>&1 &
@@ -46,6 +46,8 @@ case "$1" in
   apply  <секция> <имя>...  заменить ссылки серверов в секции podkop ссылками из подписки
   remove <секция> <имя>...  убрать серверы из секции podkop
   add    <секция> <имя>...  добавить серверы подписки в секцию podkop
+  rename <секция> <старое> <новое>...  сменить имя ссылки (сервер переименован провайдером), история переносится
+  sync   <секция> <имена для apply>... -- <старое> <новое>...  apply и rename за один перезапуск podkop
   version       показать версию
   bg <cmd> ...  запустить команду в фоне (для LuCI): результат в /tmp/podkop-monitor/<cmd>.log/.rc
 EOF

@@ -3,8 +3,8 @@
 . /lib/functions.sh
 
 PM_LIB=/usr/libexec/podkop-monitor
-PM_RUN=/tmp/podkop-monitor          # рабочие данные (RAM)
-PM_STATE=/etc/podkop-monitor        # то, что переживает перезагрузку
+PM_RUN=${PM_RUN:-/tmp/podkop-monitor}      # рабочие данные (RAM)
+PM_STATE=${PM_STATE:-/etc/podkop-monitor}  # то, что переживает перезагрузку (переопределяются для тестов)
 PM_VERSION=$(cat "$PM_LIB/VERSION" 2>/dev/null || echo 0.0.0)
 
 mkdir -p "$PM_RUN" "$PM_STATE"
