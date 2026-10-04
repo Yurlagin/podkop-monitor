@@ -11,6 +11,8 @@
 
 OUT=$PM_RUN/data.csv
 LOCK=$PM_RUN/check.lock
+# блокировка от убитого на середине прогона не должна останавливать мониторинг навсегда
+[ -d "$LOCK" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +15 2>/dev/null)" ] && rmdir "$LOCK"
 mkdir "$LOCK" 2>/dev/null || exit 0
 TMP=$PM_RUN/check.$$
 trap 'rm -rf "$LOCK" "$TMP"' EXIT
@@ -18,6 +20,7 @@ trap 'rm -rf "$LOCK" "$TMP"' EXIT
 
 [ -f "$OUT" ] || { [ -f "$PM_STATE/data.csv" ] && cp "$PM_STATE/data.csv" "$OUT"; }  # после перезагрузки
 [ -f "$PM_RUN/auto.log" ] || { [ -f "$PM_STATE/auto.log" ] && cp "$PM_STATE/auto.log" "$PM_RUN/"; }
+[ -f "$PM_RUN/skipped.tsv" ] || { [ -f "$PM_STATE/skipped.tsv" ] && cp "$PM_STATE/skipped.tsv" "$PM_RUN/"; }
 TS=$(date +%s)
 
 # check api tag section key name url...
@@ -78,8 +81,13 @@ fi
 if [ -s "$PM_STATE/servers.tsv" ] && curl -s -m 3 -o /dev/null "$PM_HELPER_API/version"; then
     n=0
     while IFS='|' read key name type host; do
-        check_server "$PM_HELPER_API" "s$key-out" _sub "$key" "$name" \
-            http://149.154.167.51/api https://www.youtube.com/generate_204 https://www.gstatic.com/generate_204 &
+        # YouTube — через отдельный YouTube-выход сервера, если он есть (как у клиента провайдера)
+        ytag=$(awk -F'|' -v k="$key" '$1 == k { print $2 }' "$PM_STATE/yt.tsv" 2>/dev/null)
+        (
+            check_server "$PM_HELPER_API" "s$key-out" _sub "$key" "$name" \
+                http://149.154.167.51/api https://www.gstatic.com/generate_204
+            check_server "$PM_HELPER_API" "${ytag:-s$key-out}" _sub "$key" "$name" https://www.youtube.com/generate_204
+        ) &
         n=$((n + 1)); [ $((n % PM_PARALLEL)) -eq 0 ] && wait  # иначе часть проверок ложно падает
     done < "$PM_STATE/servers.tsv"
     wait

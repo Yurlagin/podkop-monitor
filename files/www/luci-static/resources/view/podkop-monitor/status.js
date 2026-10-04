@@ -135,8 +135,11 @@ return view.extend({
 			L.resolveDefault(fs.read(RUN + '/update.json').then(JSON.parse), null),
 			L.resolveDefault(fs.read('/usr/libexec/podkop-monitor/VERSION'), '?'),
 			L.resolveDefault(fs.read(RUN + '/drift.csv'), ''),
-			L.resolveDefault(fs.read(RUN + '/auto.log'), '')
-		]).then(([data, country, update, version, drift, auto]) => {
+			L.resolveDefault(fs.read(RUN + '/auto.log'), ''),
+			L.resolveDefault(fs.read(RUN + '/skipped.tsv'), '')
+		]).then(([data, country, update, version, drift, auto, skipped]) => {
+			// записи подписки, которые мониторинг не может проверить: [{ name, why }]
+			this.skipped = skipped.split('\n').filter(Boolean).map(l => { const [name, why] = l.split('|'); return { name, why }; });
 			// журнал автообновления: время|имя;имя;|режим
 			this.auto = auto.split('\n').filter(Boolean).map(l => {
 				const [ts, names] = l.split('|');
@@ -222,6 +225,8 @@ return view.extend({
 	driftTag(sec, k, sv, lastMs) {
 		const d = this.drift[sec]?.[k];
 		if (!d || d.status === 'same') return '';
+		if (d.status === 'unsupported')
+			return `<span class="pm-tag pm-gray" title="Есть в подписке, но мониторинг не может его проверить: ${esc(d.fields.map(f => f.field).join(', '))}">не поддерживается</span>`;
 		if (d.status === 'missing')
 			return '<span class="pm-tag pm-gray" title="Сервера с таким именем нет в подписке: ссылка своя, переименована или сервер удалён">нет в подписке</span>';
 		const what = 'Отличается от подписки: ' + d.fields.map(f => f.field).join(', ');
@@ -515,8 +520,12 @@ return view.extend({
 			card.appendChild(E('div', { 'class': 'pm-actions' }, [addBtn, E('span', {}, 'в секцию'), pick]));
 			syncSel();
 		}
+		if (this.skipped.length)
+			card.appendChild(E('p', { 'class': 'pm-muted', 'style': 'margin:8px 0 0' },
+				`Не проверяются (${this.skipped.length}): ` + this.skipped.map(x => `${x.name} — ${x.why}`).join('; ') + '.'));
 		card.appendChild(E('p', { 'class': 'pm-muted', 'style': 'margin:8px 0 0' },
 			'Нажмите на заголовок колонки, чтобы отсортировать. Доступность и медиана — по gstatic. ' +
+			'Если провайдер ведёт YouTube через отдельный сервер, youtube.com и страна YouTube проверяются через него — как в его приложении. ' +
 			'Замеры подписки идут через отдельный sing-box и не влияют на автовыбор podkop.'));
 		return card;
 	},

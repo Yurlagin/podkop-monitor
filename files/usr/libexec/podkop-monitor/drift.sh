@@ -2,7 +2,8 @@
 # Сверка ссылок в секциях podkop с одноимёнными серверами подписки: провайдер меняет адреса, ключи, SNI —
 # а в podkop остаётся старая ссылка. Результат: $PM_RUN/drift.csv
 #   section,key,name,status,fields
-#   status: same — совпадает; differs — отличается; missing — в подписке нет
+#   status: same — совпадает; differs — отличается; missing — в подписке нет;
+#           unsupported — есть в подписке, но мониторинг не может его проверить (fields — причина)
 #   fields: «поле|было|стало» через «;» (для UUID/пароля и ключа значения не пишем)
 # Сравниваются только параметры подключения. Не сравниваются: отпечаток (utls) и ALPN — их часто меняют сознательно;
 # short id Reality — подписка выдаёт случайный из списка, который принимает сервер, при каждом запросе свой.
@@ -49,7 +50,10 @@ trap 'rm -f $TMP.*' EXIT
 # имя сервера подписки → его выход
 awk -F'|' '{ printf "{\"name\":\"%s\",\"tag\":\"s%s-out\"}\n", $2, $1 }' "$PM_STATE/servers.tsv" > $TMP.names
 
-jq -rn --slurpfile pk $TMP.podkop --slurpfile nm $TMP.names --slurpfile sb "$PM_STATE/sb.json" '
+# пропущенные записи подписки: имя → причина
+awk -F'|' '{ gsub(/"/, "", $0); printf "{\"name\":\"%s\",\"why\":\"%s\"}\n", $1, $2 }' "$PM_STATE/skipped.tsv" 2>/dev/null > $TMP.skip
+
+jq -rn --slurpfile pk $TMP.podkop --slurpfile nm $TMP.names --slurpfile sb "$PM_STATE/sb.json" --slurpfile sk $TMP.skip '
   def norm: {
       "адрес": .server, "порт": (.server_port | tostring), "UUID/пароль": (.uuid // .password),
       "flow": (.flow // ""), "SNI": (.tls.server_name // ""),
@@ -63,7 +67,9 @@ jq -rn --slurpfile pk $TMP.podkop --slurpfile nm $TMP.names --slurpfile sb "$PM_
   | $pk[]
   | . as $p
   | $byname[$p.name] as $s
-  | if $s == null then [$p.sec, $p.key, $p.name, "missing", ""]
+  | ($sk | map(select(.name == $p.name)) | first) as $skip
+  | if $s == null and $skip then [$p.sec, $p.key, $p.name, "unsupported", $skip.why]
+    elif $s == null then [$p.sec, $p.key, $p.name, "missing", ""]
     else ($p.ob | norm) as $a | ($s | norm) as $b
       | [ $a | keys_unsorted[] | select($a[.] != $b[.])
           | if IN("UUID/пароль", "ключ Reality") then "\(.)||"

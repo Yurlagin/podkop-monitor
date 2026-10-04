@@ -1,7 +1,10 @@
 # Xray-JSON подписки (Remnawave, NetHaven и т.п.) → выходы sing-box для замеров.
-# Результат: { servers: ["N|имя|тип|хост"], links: ["N|ссылка"], outbounds: [...] }, теги выходов — sN-out.
+# Результат: { servers: ["N|имя|тип|хост"], links: ["N|ссылка"], outbounds: [...], yt: [...], skipped: ["имя|причина"] }
+# Теги выходов — sN-out; если у сервера YouTube идёт через отдельный выход (правило маршрутизации в записи
+# подписки, как у NetHaven: «yt-ru»), он добавляется как sN-yt-out, а в yt — домены, которые на него идут.
 # Ссылки (vless:// и hysteria2://) нужны, чтобы по кнопке заменить устаревшую ссылку в podkop.
-# Берём конфиги с одним прокси-выходом (пропускаем «Автовыбор»), XHTTP пропускаем — sing-box его не умеет.
+# Пропускаем: записи с балансировщиком («Автовыбор»), записи без понятного основного выхода и XHTTP
+# (sing-box его не умеет) — с причиной в skipped.
 def tls_of($s; $ws):
   ($s.tlsSettings // $s.realitySettings // {}) as $t
   | { enabled: true, server_name: $t.serverName }
@@ -56,16 +59,63 @@ def link($name):
       + "#\($name | @uri)"
     end;
 
+def is_proxy: .protocol == "vless" or .protocol == "hysteria";
+def supported: (.streamSettings.network // "tcp") | IN("tcp", "raw", "ws", "hysteria");
+def net_name: (.streamSettings.network // "tcp");
+
+# основной выход записи: по тегу «proxy» (так помечают основной выход Xray-клиенты и панели),
+# иначе — единственный прокси-выход, иначе — цель последнего правила без условий
+def main_outbound:
+  [ .outbounds[] | select(is_proxy) ] as $p
+  | ([ $p[] | select(.tag == "proxy") ] | .[0]) as $tagged
+  | ([ .routing.rules[]?
+       | select(.outboundTag and ((has("domain") or has("ip") or has("port") or has("protocol")) | not))
+       | .outboundTag ] | .[-1]) as $last
+  | if $tagged != null then $tagged
+    elif ($p | length) == 1 then $p[0]
+    elif $last != null then ([ $p[] | select(.tag == $last) ] | .[0])
+    else null end;
+
+# правило для YouTube: { tag, domain_suffix, domain, domain_keyword } или null.
+# Берём первое правило с доменами YouTube, которое ведёт на прокси-выход (а не block/direct —
+# например, NetHaven сначала блокирует QUIC YouTube, а TCP отправляет на отдельный выход «yt-ru»).
+def youtube_rule:
+  [ .outbounds[] | select(is_proxy) | .tag ] as $ptags
+  | [ .routing.rules[]?
+    | select(.outboundTag as $t | $ptags | index($t))
+    | select((.domain // []) | map(tostring) | any(contains("youtube.com") or contains("googlevideo"))) ]
+  | .[0]
+  | if . == null then null else
+      { tag: .outboundTag,
+        domain_suffix: [ .domain[] | tostring | select(startswith("domain:")) | .[7:] ],
+        domain: [ .domain[] | tostring | select(startswith("full:")) | .[5:] ],
+        domain_keyword: [ .domain[] | tostring | select(startswith("keyword:")) | .[8:] ] }
+    end;
+
 [ .[]
-  | { name: (.remarks | explode | map(select(. != 44 and . != 124 and . != 34)) | implode),
-      obs: [ .outbounds[] | select(.protocol == "vless" or .protocol == "hysteria") ] }
-  | select((.obs | length) == 1)
-  | select((.obs[0].streamSettings.network // "tcp") | IN("tcp", "raw", "ws", "hysteria"))
-  | { name, ob: .obs[0] } ]
+  | (.remarks | explode | map(select(. != 44 and . != 124 and . != 34)) | implode) as $name
+  | if ((.routing.balancers // []) | length) > 0 or ([ .routing.rules[]? | select(.balancerTag) ] | length) > 0 then
+      { name: $name, skip: "несколько серверов с автовыбором" }
+    else
+      main_outbound as $m
+      | if $m == null then { name: $name, skip: "не удалось определить основной выход" }
+        elif ($m | supported | not) then { name: $name, skip: "транспорт \($m | net_name) не поддерживается sing-box" }
+        else
+          youtube_rule as $y
+          | (if $y != null and $y.tag != $m.tag then ([ .outbounds[] | select(.tag == $y.tag and is_proxy and supported) ] | .[0]) else null end) as $yo
+          | { name: $name, ob: $m, yt: (if $yo then $y + { ob: $yo } else null end) }
+        end
+    end ]
+| (map(select(.skip)) | map("\(.name)|\(.skip)")) as $skipped
+| map(select(.skip | not))
 | to_entries
 | map(.key += 1)
 | {
+    skipped: $skipped,
     links: map(. as $e | "\($e.key)|\($e.value.ob | link($e.value.name))"),
     servers: map("\(.key)|\(.value.name)|\(.value.ob.protocol)/\(.value.ob.streamSettings.network)|\(.value.ob.settings.vnext[0].address // .value.ob.settings.address)"),
-    outbounds: map(. as $e | $e.value.ob | outbound("s\($e.key)-out"))
+    outbounds: (map(. as $e | $e.value.ob | outbound("s\($e.key)-out"))
+                + map(select(.value.yt) | . as $e | $e.value.yt.ob | outbound("s\($e.key)-yt-out"))),
+    yt: map(select(.value.yt) | { key, tag: "s\(.key)-yt-out",
+            domain_suffix: .value.yt.domain_suffix, domain: .value.yt.domain, domain_keyword: .value.yt.domain_keyword })
   }
