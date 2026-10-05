@@ -10,16 +10,30 @@
 [ -n "$PM_SUB_URL" ] || { pm_log "подписка не задана"; exit 0; }
 
 TMP=$PM_RUN/sub.$$
-trap 'rm -f $TMP.*' EXIT
+trap '[ -n "$TMP" ] && rm -f "$TMP".*' EXIT
 : > $TMP.skip
 echo '[]' > $TMP.yt
 
-code=$(curl -s -L -m 30 -A "$PM_SUB_UA" -o $TMP.raw -w "%{http_code}" "$PM_SUB_URL")
-[ "$code" = 200 ] || { pm_log "подписка: HTTP $code, оставляю прежний список"; exit 1; }
+# состояние для уведомлений: «когда последний раз удачно|когда последняя ошибка|текст ошибки»
+sub_fail() {
+    local ok
+    ok=$(cut -d'|' -f1 $PM_STATE/sub-status 2>/dev/null)
+    echo "${ok:-0}|$(date +%s)|$1" > $PM_STATE/sub-status
+    pm_log "подписка: $1, оставляю прежний список"
+    exit 1
+}
+
+code=$(curl -s -L -m 30 -A "$PM_SUB_UA" -D $TMP.hdr -o $TMP.raw -w "%{http_code}" "$PM_SUB_URL")
+[ "$code" = 200 ] || sub_fail "HTTP $code"
+# трафик и срок подписки из заголовка subscription-userinfo: «upload|download|total|expire»
+grep -i '^subscription-userinfo:' $TMP.hdr | tail -1 | tr -d '\r' | sed 's/^[^:]*://' | tr ';' '\n' \
+    | awk -F= '{ k = $1; gsub(/ /, "", k); if (k != "") { v[k] = $2 + 0; n++ } }
+               END { if (n) print v["upload"] + 0 "|" v["download"] + 0 "|" v["total"] + 0 "|" v["expire"] + 0 }' > $TMP.ui
+[ -s $TMP.ui ] && mv $TMP.ui $PM_STATE/sub-userinfo
 
 if jq -e 'type == "array" and length > 0 and (.[0].outbounds | type == "array")' $TMP.raw >/dev/null 2>&1; then
     # Xray-JSON
-    jq -f $PM_LIB/xray2singbox.jq $TMP.raw > $TMP.conv || { pm_log "подписка: ошибка разбора Xray-JSON"; exit 1; }
+    jq -f $PM_LIB/xray2singbox.jq $TMP.raw > $TMP.conv || sub_fail "ошибка разбора Xray-JSON"
     jq '.outbounds' $TMP.conv > $TMP.obs
     jq -r '.servers[]' $TMP.conv > $TMP.tsv
     jq -r '.links[]' $TMP.conv > $TMP.links
@@ -52,7 +66,7 @@ else
     )
 fi
 
-[ -s $TMP.tsv ] || { pm_log "подписка: не найдено ни одного поддерживаемого сервера"; exit 1; }
+[ -s $TMP.tsv ] || sub_fail "не найдено ни одного поддерживаемого сервера"
 
 # вход N → сервер N; домены YouTube — на отдельный YouTube-выход сервера, если он есть (как у клиента провайдера)
 jq --argjson port "$PM_HELPER_PORT" --argjson base "$PM_BASE_PORT" --argjson n "$(wc -l < $TMP.tsv)" \
@@ -77,7 +91,8 @@ jq --argjson port "$PM_HELPER_PORT" --argjson base "$PM_BASE_PORT" --argjson n "
       experimental: { clash_api: { external_controller: "127.0.0.1:\($port)" } }
     }' $TMP.obs > $TMP.cfg || { pm_log "подписка: ошибка сборки конфига"; exit 1; }
 
-sing-box check -c $TMP.cfg 2>$TMP.err || { pm_log "подписка: sing-box check: $(head -c 300 $TMP.err)"; exit 1; }
+sing-box check -c $TMP.cfg 2>$TMP.err || sub_fail "sing-box check: $(head -c 200 $TMP.err | tr '\n|' '  ')"
+echo "$(date +%s)|$(cut -d'|' -f2 $PM_STATE/sub-status 2>/dev/null)|" > $PM_STATE/sub-status  # скачалась и разобралась
 
 # Защита от резкой потери серверов: если провайдер сменил формат и мы перестали понимать часть записей,
 # лучше оставить прежний список и предупредить, чем молча потерять половину серверов.

@@ -16,6 +16,8 @@ case "$1" in
         ;;
     country)      exec $L/country.sh ;;
     update-check) exec $L/update.sh check ;;
+    notify-test)  exec $L/notify.sh test "$2" "$3" "$4" ;;
+    notify-chatid) exec $L/notify.sh chatid "$2" "$3" ;;
     apply|remove|add|rename|sync)
         # правка секции podkop: <секция> <имя сервера>...
         exec $L/edit.sh "$@" ;;
@@ -51,6 +53,8 @@ case "$1" in
   add    <секция> <имя>...  добавить серверы подписки в секцию podkop
   rename <секция> <старое> <новое>...  сменить имя ссылки (сервер переименован провайдером), история переносится
   sync   <секция> <имена для apply>... -- <старое> <новое>...  apply и rename за один перезапуск podkop
+  notify-test <токен> <chat_id> [0|1]  тестовое сообщение в Telegram (1 — через прокси podkop)
+  notify-chatid <токен> [0|1]          ID чата из последнего сообщения боту
   version       показать версию
   bg <cmd> ...  запустить команду в фоне (для LuCI): результат в /tmp/podkop-monitor/<cmd>.log/.rc
 EOF

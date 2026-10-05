@@ -11,7 +11,7 @@ curl -s -m 3 -o /dev/null "$PM_HELPER_API/version" || exit 0
 
 TS=$(date +%s)
 TMP=$PM_RUN/country.$$
-trap 'rm -f $TMP' EXIT
+trap '[ -n "$TMP" ] && rm -f "$TMP"' EXIT
 : > $TMP
 
 while IFS='|' read key name type host; do

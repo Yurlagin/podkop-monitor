@@ -16,7 +16,7 @@ DRIFT=$PM_RUN/drift.csv
 [ -s "$DRIFT" ] && [ -s "$PM_STATE/links.tsv" ] || exit 0
 
 TMP=$PM_RUN/auto.$$
-trap 'rm -f $TMP.*' EXIT
+trap '[ -n "$TMP" ] && rm -f "$TMP".*' EXIT
 
 # исключения (имена могут содержать пробелы — читаем список UCI поэлементно)
 : > $TMP.excl

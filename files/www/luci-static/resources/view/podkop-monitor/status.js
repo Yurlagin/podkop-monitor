@@ -138,8 +138,12 @@ return view.extend({
 			L.resolveDefault(fs.read(RUN + '/drift.csv'), ''),
 			L.resolveDefault(fs.read(RUN + '/auto.log'), ''),
 			L.resolveDefault(fs.read(RUN + '/skipped.tsv'), ''),
-			L.resolveDefault(fs.read(RUN + '/sub-warning'), '')
-		]).then(([data, country, update, version, drift, auto, skipped, subWarning]) => {
+			L.resolveDefault(fs.read(RUN + '/sub-warning'), ''),
+			L.resolveDefault(fs.read(RUN + '/notify.last'), '')
+		]).then(([data, country, update, version, drift, auto, skipped, subWarning, notifyLast]) => {
+			// результат последней отправки в Telegram: «время|1/0|ошибка»
+			const nl = notifyLast.trim().split('|');
+			this.notifyFail = nl.length >= 2 && nl[1] === '0' ? { ts: +nl[0], err: nl.slice(2).join('|') } : null;
 			// подписка не обновлена: серверов стало резко меньше — «время|было|стало|пропущенные;…»
 			const w = subWarning.trim().split('|');
 			this.subWarning = w.length >= 3 ? { ts: +w[0], was: +w[1], now: +w[2], skipped: (w[3] || '').split(';').filter(Boolean) } : null;
@@ -636,6 +640,13 @@ return view.extend({
 			root.appendChild(E('p', {}, 'Данных пока нет: первая проверка появится в течение нескольких минут, либо нажмите «Проверить сейчас».'));
 			return;
 		}
+		if (this.notifyFail && uci.get('podkop-monitor', 'notify', 'enabled') === '1')
+			root.appendChild(E('div', { 'class': 'pm-card pm-bar pm-update' }, [
+				E('span', {}, [E('strong', { 'class': 'pm-warn' }, 'Уведомление в Telegram не отправилось '),
+					`${dt(this.notifyFail.ts)}: ${this.notifyFail.err}. Мониторинг повторит при следующей проверке.`]),
+				E('span', { 'class': 'pm-sp' }),
+				E('a', { 'href': L.url('admin/services/podkop-monitor/settings') }, 'Настройки')
+			]));
 		if (this.subWarning) {
 			const w = this.subWarning;
 			root.appendChild(E('div', { 'class': 'pm-card pm-bar pm-update' }, [

@@ -23,3 +23,18 @@ config main 'main'
 	option parallel '8'
 	# таймаут одной проверки, мс
 	option timeout '5000'
+
+config notify 'notify'
+	# уведомления в Telegram о том, что требует вмешательства
+	option enabled '0'
+	option bot_token ''
+	option chat_id ''
+	# отправлять через локальный прокси podkop (Telegram API в России может блокироваться)
+	option via_proxy '1'
+	# группы событий: серверы и подписка требуют вмешательства / подписка не скачивается и трафик
+	option ev_attention '1'
+	option ev_subscription '1'
+	option quota_levels '80 90 95'
+	option sub_stale_hours '24'
+	# напоминать о нерешённом не чаще, чем раз в N часов
+	option repeat_hours '24'

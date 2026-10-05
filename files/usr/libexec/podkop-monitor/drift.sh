@@ -18,7 +18,7 @@ OUT=$PM_RUN/drift.csv
 [ -s "$PM_STATE/sb.json" ] && [ -s "$PM_STATE/servers.tsv" ] || { rm -f "$OUT"; exit 0; }
 
 TMP=$PM_RUN/drift.$$
-trap 'rm -f $TMP.*' EXIT
+trap '[ -n "$TMP" ] && rm -f "$TMP".*' EXIT
 
 # выходы podkop по ссылкам из его конфига — тем же кодом, что и сам podkop
 (

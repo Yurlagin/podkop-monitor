@@ -1,6 +1,17 @@
 #!/bin/sh
 [ -n "$IPKG_INSTROOT" ] && exit 0
 rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache
+# при обновлении со старой версии в конфиге (он сохраняется) ещё нет раздела уведомлений
+if ! uci -q get podkop-monitor.notify >/dev/null; then
+	uci set podkop-monitor.notify=notify
+	uci set podkop-monitor.notify.enabled=0
+	uci set podkop-monitor.notify.via_proxy=1
+	uci set podkop-monitor.notify.ev_attention=1
+	uci set podkop-monitor.notify.ev_subscription=1
+	uci set podkop-monitor.notify.quota_levels='80 90 95'
+	uci commit podkop-monitor
+fi
+rm -f /etc/config/podkop-monitor-opkg  # образец нового конфига: свои настройки остаются, недостающее добавлено выше
 /etc/init.d/rpcd reload
 /etc/init.d/podkop-monitor enable
 /etc/init.d/podkop-monitor restart

@@ -2,6 +2,8 @@
 'require view';
 'require form';
 'require uci';
+'require fs';
+'require ui';
 
 return view.extend({
 	load() {
@@ -89,6 +91,74 @@ return view.extend({
 			'Сервер N подписки доступен на 127.0.0.1:(порт+N) — для проверки страны YouTube.');
 		o.datatype = 'port';
 		o.default = '32000';
+
+		// --- уведомления в Telegram ---
+		const n = m.section(form.NamedSection, 'notify', 'notify', 'Уведомления в Telegram',
+			'Сообщение придёт, когда что-то требует вашего вмешательства: подписка резко изменилась, сервер из секции пропал из подписки ' +
+			'или перестал работать и сам не починился, переименование нужно выбрать вручную, подписка не скачивается, трафик на исходе. ' +
+			'Одно сообщение на событие; о нерешённом — напоминание раз в сутки; когда проблема ушла — «решено».');
+		n.addremove = false;
+		const val = (name, sid) => m.lookupOption(name, sid)[0].formvalue(sid);
+		const CLI = '/usr/bin/podkop-monitor';
+		const out = res => (res.stdout || res.stderr || '').trim();
+
+		o = n.option(form.Flag, 'enabled', 'Включить');
+		o.default = '0';
+		o.rmempty = false;
+
+		o = n.option(form.Value, 'bot_token', 'Токен бота',
+			'Создайте бота: напишите @BotFather в Telegram команду /newbot и скопируйте выданный токен. ' +
+			'Затем напишите своему боту любое сообщение — без этого он не сможет писать вам.');
+		o.password = true;
+		o.placeholder = '123456789:AA…';
+		o.validate = (id, v) => !v || /^\d+:[\w-]{20,}$/.test(v) || 'Похоже, это не токен бота';
+
+		o = n.option(form.Value, 'chat_id', 'ID чата', 'Нажмите «Определить» после того, как написали боту.');
+		o.datatype = 'string';
+		o.placeholder = '123456789';
+
+		o = n.option(form.Button, '_chatid', ' ');
+		o.inputtitle = 'Определить ID чата';
+		o.inputstyle = 'action';
+		o.onclick = (ev, sid) => {
+			const token = val('bot_token', sid);
+			if (!token) return ui.addNotification(null, E('p', 'Сначала впишите токен бота'), 'warning');
+			return fs.exec(CLI, ['notify-chatid', token, val('via_proxy', sid) === '1' ? '1' : '0']).then(res => {
+				if (res.code !== 0) return ui.addNotification(null, E('p', out(res)), 'error');
+				m.lookupOption('chat_id', sid)[0].getUIElement(sid).setValue(out(res));
+				ui.addNotification(null, E('p', `ID чата: ${out(res)}. Нажмите «Сохранить и применить».`), 'info');
+			});
+		};
+
+		o = n.option(form.Flag, 'via_proxy', 'Через прокси podkop',
+			'Отправлять через локальный прокси podkop: Telegram API в России может блокироваться. Нужен включённый «Mixed proxy» в основной секции podkop.');
+		o.default = '1';
+		o.rmempty = false;
+
+		o = n.option(form.Flag, 'ev_attention', 'Серверы и подписка требуют вмешательства',
+			'Подписка резко изменилась; сервер из секции пропал из подписки; не отвечает и сам не обновился; переименование нужно выбрать вручную.');
+		o.default = '1';
+		o.rmempty = false;
+
+		o = n.option(form.Flag, 'ev_subscription', 'Подписка не скачивается, трафик и срок',
+			'Подписка не скачивается больше суток; израсходовано много трафика; до конца подписки меньше 3 дней.');
+		o.default = '1';
+		o.rmempty = false;
+
+		o = n.option(form.Value, 'quota_levels', 'Пороги трафика, %', 'Через пробел.');
+		o.default = '80 90 95';
+		o.depends('ev_subscription', '1');
+		o.validate = (id, v) => !v || /^(\d{1,2}|100)( (\d{1,2}|100))*$/.test(v.trim()) || 'Числа от 1 до 100 через пробел';
+
+		o = n.option(form.Button, '_test', ' ');
+		o.inputtitle = 'Отправить тестовое сообщение';
+		o.inputstyle = 'apply';
+		o.onclick = (ev, sid) => {
+			const token = val('bot_token', sid), chat = val('chat_id', sid);
+			if (!token || !chat) return ui.addNotification(null, E('p', 'Нужны токен бота и ID чата'), 'warning');
+			return fs.exec(CLI, ['notify-test', token, chat, val('via_proxy', sid) === '1' ? '1' : '0']).then(res =>
+				ui.addNotification(null, E('p', out(res)), res.code === 0 ? 'info' : 'error'));
+		};
 
 		return m.render();
 	}
