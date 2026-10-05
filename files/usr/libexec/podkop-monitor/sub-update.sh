@@ -79,6 +79,19 @@ jq --argjson port "$PM_HELPER_PORT" --argjson base "$PM_BASE_PORT" --argjson n "
 
 sing-box check -c $TMP.cfg 2>$TMP.err || { pm_log "подписка: sing-box check: $(head -c 300 $TMP.err)"; exit 1; }
 
+# Защита от резкой потери серверов: если провайдер сменил формат и мы перестали понимать часть записей,
+# лучше оставить прежний список и предупредить, чем молча потерять половину серверов.
+# Не срабатывает при смене ссылки на подписку и при PM_SUB_FORCE=1 («Принять новый список»).
+new_n=$(wc -l < $TMP.tsv); old_n=$(wc -l < $PM_STATE/servers.tsv 2>/dev/null || echo 0)
+if [ -z "$PM_SUB_FORCE" ] && [ "$PM_SUB_URL" = "$(cat $PM_STATE/sub.url 2>/dev/null)" ] \
+   && [ "$old_n" -ge 5 ] && [ $((new_n * 10)) -lt $((old_n * 6)) ]; then
+    echo "$(date +%s)|$old_n|$new_n|$(cut -d'|' -f1 $TMP.skip | head -20 | tr '\n' ';')" > $PM_STATE/sub-warning
+    cp $PM_STATE/sub-warning $PM_RUN/sub-warning
+    pm_log "подписка: серверов стало $new_n вместо $old_n — список не обновлён (возможно, провайдер сменил формат). Принять: podkop-monitor sub-update --force"
+    exit 2
+fi
+rm -f $PM_STATE/sub-warning $PM_RUN/sub-warning
+
 echo "$PM_SUB_URL" > $PM_STATE/sub.url && chmod 600 $PM_STATE/sub.url  # для init: заметить смену ссылки
 
 # ссылки серверов — для замены устаревших ссылок в podkop по кнопке (содержат ключи)

@@ -5,8 +5,10 @@ L=/usr/libexec/podkop-monitor
 
 case "$1" in
     check)        exec $L/check.sh ;;
-    sub-update)
-        # обновить список серверов подписки и сразу проверить для них страну YouTube
+    sub-update|sub-update-force)
+        # обновить список серверов подписки и сразу проверить для них страну YouTube;
+        # --force / sub-update-force — принять новый список, даже если серверов стало заметно меньше
+        { [ "$1" = sub-update-force ] || [ "$2" = --force ]; } && export PM_SUB_FORCE=1
         $L/sub-update.sh; rc=$?
         sleep 5
         $L/country.sh
@@ -28,7 +30,7 @@ case "$1" in
     version)      cat $L/VERSION ;;
     bg)
         # для LuCI: запустить длинную команду в фоне; результат — /tmp/podkop-monitor/<cmd>.log и .rc
-        case "$2" in check|sub-update|upgrade|apply|remove|add|rename|sync) ;; *) echo "bg: check|sub-update|upgrade|apply|remove|add|rename|sync"; exit 1 ;; esac
+        case "$2" in check|sub-update|sub-update-force|upgrade|apply|remove|add|rename|sync) ;; *) echo "bg: check|sub-update|sub-update-force|upgrade|apply|remove|add|rename|sync"; exit 1 ;; esac
         R=/tmp/podkop-monitor; mkdir -p $R; rm -f $R/$2.rc
         C=$2; shift 2
         ( $0 "$C" "$@" > $R/$C.log 2>&1; echo $? > $R/$C.rc ) </dev/null >/dev/null 2>&1 &
@@ -38,7 +40,8 @@ case "$1" in
         cat <<EOF
 Использование: podkop-monitor <команда>
   check         прогон замеров (cron, раз в interval минут)
-  sub-update    обновить список серверов подписки (+ страна YouTube)
+  sub-update [--force]  обновить список серверов подписки (+ страна YouTube);
+                --force — принять, даже если серверов стало заметно меньше
   country       проверить страну YouTube через серверы подписки
   daily         sub-update + country + update-check (cron, раз в сутки)
   update-check  проверить наличие новой версии

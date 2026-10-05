@@ -137,8 +137,12 @@ return view.extend({
 			L.resolveDefault(fs.read('/usr/libexec/podkop-monitor/VERSION'), '?'),
 			L.resolveDefault(fs.read(RUN + '/drift.csv'), ''),
 			L.resolveDefault(fs.read(RUN + '/auto.log'), ''),
-			L.resolveDefault(fs.read(RUN + '/skipped.tsv'), '')
-		]).then(([data, country, update, version, drift, auto, skipped]) => {
+			L.resolveDefault(fs.read(RUN + '/skipped.tsv'), ''),
+			L.resolveDefault(fs.read(RUN + '/sub-warning'), '')
+		]).then(([data, country, update, version, drift, auto, skipped, subWarning]) => {
+			// подписка не обновлена: серверов стало резко меньше — «время|было|стало|пропущенные;…»
+			const w = subWarning.trim().split('|');
+			this.subWarning = w.length >= 3 ? { ts: +w[0], was: +w[1], now: +w[2], skipped: (w[3] || '').split(';').filter(Boolean) } : null;
 			// записи подписки, которые мониторинг не может проверить: [{ name, why }]
 			this.skipped = skipped.split('\n').filter(Boolean).map(l => { const [name, why] = l.split('|'); return { name, why }; });
 			// журнал автообновления: время|имя;имя;|режим
@@ -631,6 +635,19 @@ return view.extend({
 		if (!last) {
 			root.appendChild(E('p', {}, 'Данных пока нет: первая проверка появится в течение нескольких минут, либо нажмите «Проверить сейчас».'));
 			return;
+		}
+		if (this.subWarning) {
+			const w = this.subWarning;
+			root.appendChild(E('div', { 'class': 'pm-card pm-bar pm-update' }, [
+				E('div', { 'style': 'flex:1 1 400px' }, [
+					E('strong', { 'class': 'pm-warn' }, 'Список серверов подписки не обновлён. '),
+					`При обновлении ${dt(w.ts)} серверов оказалось ${w.now} вместо ${w.was} — возможно, провайдер сменил формат подписки, ` +
+					'и мониторинг перестал понимать часть записей. Прежний список оставлен. ' +
+					(w.skipped.length ? `Не разобраны: ${w.skipped.slice(0, 8).join(', ')}${w.skipped.length > 8 ? '…' : ''}. ` : '') +
+					'Если провайдер действительно убрал серверы — примите новый список; если нет — проверьте, не вышло ли обновление мониторинга.'
+				]),
+				E('button', { 'class': 'cbi-button cbi-button-negative', 'click': ui.createHandlerFn(this, () => this.runBg('sub-update-force', 'Принятие нового списка', false)) }, 'Принять новый список')
+			]));
 		}
 		const order = uci.sections('podkop', 'section').map(s => s['.name']).filter(n => this.data[n]);
 		for (const sec of order) root.appendChild(this.renderSection(sec, this.data[sec], since));

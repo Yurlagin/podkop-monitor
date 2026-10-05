@@ -21,6 +21,7 @@ trap 'rm -rf "$LOCK" "$TMP"' EXIT
 [ -f "$OUT" ] || { [ -f "$PM_STATE/data.csv" ] && cp "$PM_STATE/data.csv" "$OUT"; }  # после перезагрузки
 [ -f "$PM_RUN/auto.log" ] || { [ -f "$PM_STATE/auto.log" ] && cp "$PM_STATE/auto.log" "$PM_RUN/"; }
 [ -f "$PM_RUN/skipped.tsv" ] || { [ -f "$PM_STATE/skipped.tsv" ] && cp "$PM_STATE/skipped.tsv" "$PM_RUN/"; }
+[ -f "$PM_RUN/sub-warning" ] || { [ -f "$PM_STATE/sub-warning" ] && cp "$PM_STATE/sub-warning" "$PM_RUN/"; }
 TS=$(date +%s)
 
 # check api tag section key name url...

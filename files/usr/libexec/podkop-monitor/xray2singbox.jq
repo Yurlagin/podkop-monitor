@@ -63,38 +63,59 @@ def is_proxy: .protocol == "vless" or .protocol == "hysteria";
 def supported: (.streamSettings.network // "tcp") | IN("tcp", "raw", "ws", "hysteria");
 def net_name: (.streamSettings.network // "tcp");
 
+# правило «всё остальное»: без условий на домены, адреса, порты, протоколы (условие на сеть tcp/udp допустимо)
+def catch_all:
+  (has("domain") or has("ip") or has("port") or has("sourcePort") or has("source")
+   or has("protocol") or has("user") or has("inboundTag") or has("attrs")) | not;
+
+# «Автовыбор»: весь остальной трафик уходит на балансировщик (несколько серверов в одной записи).
+# Балансировщик только для части трафика (например, YouTube) — не автовыбор.
+def is_autoselect: [ .routing.rules[]? | select(catch_all and .balancerTag) ] | length > 0;
+
+# выходы-кандидаты балансировщика: в Xray selector — это начала тегов
+def balancer_outbounds($tag):
+  . as $c
+  | ([ .routing.balancers[]? | select(.tag == $tag) ] | .[0]) as $b
+  | if $b == null then []
+    else
+      [ $c.outbounds[] | select(is_proxy and supported) | . as $o
+        | select(any($b.selector[]?; . as $p | $o.tag | startswith($p))) ]
+      + [ $c.outbounds[] | select(is_proxy and supported and .tag == $b.fallbackTag) ]
+    end;
+
 # основной выход записи: по тегу «proxy» (так помечают основной выход Xray-клиенты и панели),
-# иначе — единственный прокси-выход, иначе — цель последнего правила без условий
+# иначе — единственный прокси-выход, иначе — цель правила «всё остальное»
 def main_outbound:
   [ .outbounds[] | select(is_proxy) ] as $p
   | ([ $p[] | select(.tag == "proxy") ] | .[0]) as $tagged
-  | ([ .routing.rules[]?
-       | select(.outboundTag and ((has("domain") or has("ip") or has("port") or has("protocol")) | not))
-       | .outboundTag ] | .[-1]) as $last
+  | ([ .routing.rules[]? | select(catch_all and .outboundTag) | .outboundTag ] | .[-1]) as $last
   | if $tagged != null then $tagged
     elif ($p | length) == 1 then $p[0]
     elif $last != null then ([ $p[] | select(.tag == $last) ] | .[0])
     else null end;
 
-# правило для YouTube: { tag, domain_suffix, domain, domain_keyword } или null.
-# Берём первое правило с доменами YouTube, которое ведёт на прокси-выход (а не block/direct —
-# например, NetHaven сначала блокирует QUIC YouTube, а TCP отправляет на отдельный выход «yt-ru»).
+# правило для YouTube: { ob, domain_suffix, domain, domain_keyword } или null.
+# Берём первое правило с доменами YouTube, которое ведёт на прокси-выход или на балансировщик
+# (а не block/direct — например, NetHaven сначала блокирует QUIC YouTube, а TCP отправляет на
+# отдельный российский сервер: сначала напрямую на «yt-ru», с 05.10.2026 — через балансировщик «yt-balancer»).
 def youtube_rule:
-  [ .outbounds[] | select(is_proxy) | .tag ] as $ptags
+  . as $c
   | [ .routing.rules[]?
-    | select(.outboundTag as $t | $ptags | index($t))
-    | select((.domain // []) | map(tostring) | any(contains("youtube.com") or contains("googlevideo"))) ]
-  | .[0]
-  | if . == null then null else
-      { tag: .outboundTag,
-        domain_suffix: [ .domain[] | tostring | select(startswith("domain:")) | .[7:] ],
-        domain: [ .domain[] | tostring | select(startswith("full:")) | .[5:] ],
-        domain_keyword: [ .domain[] | tostring | select(startswith("keyword:")) | .[8:] ] }
-    end;
+      | select((.domain // []) | map(tostring) | any(contains("youtube.com") or contains("googlevideo")))
+      | . as $r
+      | (if $r.outboundTag then [ $c.outbounds[] | select(.tag == $r.outboundTag and is_proxy and supported) ]
+         elif $r.balancerTag then ($c | balancer_outbounds($r.balancerTag))
+         else [] end) as $obs
+      | select(($obs | length) > 0)
+      | { ob: $obs[0],
+          domain_suffix: [ $r.domain[] | tostring | select(startswith("domain:")) | .[7:] ],
+          domain: [ $r.domain[] | tostring | select(startswith("full:")) | .[5:] ],
+          domain_keyword: [ $r.domain[] | tostring | select(startswith("keyword:")) | .[8:] ] } ]
+  | .[0];
 
 [ .[]
   | (.remarks | explode | map(select(. != 44 and . != 124 and . != 34)) | implode) as $name
-  | if ((.routing.balancers // []) | length) > 0 or ([ .routing.rules[]? | select(.balancerTag) ] | length) > 0 then
+  | if is_autoselect then
       { name: $name, skip: "несколько серверов с автовыбором" }
     else
       main_outbound as $m
@@ -102,8 +123,7 @@ def youtube_rule:
         elif ($m | supported | not) then { name: $name, skip: "транспорт \($m | net_name) не поддерживается sing-box" }
         else
           youtube_rule as $y
-          | (if $y != null and $y.tag != $m.tag then ([ .outbounds[] | select(.tag == $y.tag and is_proxy and supported) ] | .[0]) else null end) as $yo
-          | { name: $name, ob: $m, yt: (if $yo then $y + { ob: $yo } else null end) }
+          | { name: $name, ob: $m, yt: (if $y != null and $y.ob.tag != $m.tag then $y else null end) }
         end
     end ]
 | (map(select(.skip)) | map("\(.name)|\(.skip)")) as $skipped
