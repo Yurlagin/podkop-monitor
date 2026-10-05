@@ -25,7 +25,8 @@ jobs:
           cp dist/podkop-monitor_*_all.ipk dist/podkop-monitor_all.ipk
           sed "s#@REPO@#$GITHUB_REPOSITORY#g" install.sh > dist/install.sh
 
+      # --verify-tag: если тег ещё не виден API, упасть, а не создать черновик «untagged-…» (так было с v0.1.4)
       - name: Релиз
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.ipk dist/install.sh --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.ipk dist/install.sh --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
