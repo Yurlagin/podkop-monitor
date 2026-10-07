@@ -200,6 +200,58 @@ return view.extend({
 		return fs.exec(CLI, ['update-check']).then(() => this.refresh());
 	},
 
+	// диагностика podkop без личных данных: собрать, показать, дать скачать или скопировать
+	collectDiag() {
+		const title = 'Диагностика podkop';
+		ui.showModal(title, [E('p', { 'class': 'spinning' }, 'Собираю сведения о podkop, это займёт около 20 секунд…')]);
+		const started = Date.now();
+		return fs.exec(CLI, ['bg', 'diag']).then(() => new Promise(resolve => {
+			const tick = () => L.resolveDefault(fs.read(`${RUN}/diag.rc`), null).then(rc => {
+				if (rc === null && Date.now() - started < 180000) return setTimeout(tick, 2000);
+				return L.resolveDefault(fs.read(`${RUN}/diag.log`), '').then(log => {
+					const path = log.trim().split('\n').pop();
+					const ok = rc !== null && rc.trim() === '0' && path.startsWith(`${RUN}/podkop-diag-`);
+					return (ok ? L.resolveDefault(fs.read(path), null) : Promise.resolve(null)).then(text => {
+						resolve();
+						if (text === null) {
+							ui.showModal(title, [
+								E('pre', { 'style': 'white-space:pre-wrap' }, log || 'Нет ответа'),
+								E('div', { 'class': 'right' }, E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, 'Закрыть'))
+							]);
+							return;
+						}
+						const name = path.split('/').pop();
+						const area = E('textarea', { 'readonly': true, 'wrap': 'off',
+							'style': 'width:100%;height:320px;font-family:monospace;font-size:12px;white-space:pre;overflow:auto' }, text);
+						const copied = E('span', { 'class': 'pm-muted' });
+						ui.showModal(title, [
+							E('p', {}, 'Отчёт собран. Ссылки и ключи серверов, их адреса, ссылка подписки, токен бота, внешние IP, ' +
+								'свои домены и подсети в нём заменены метками (host-1, ip-1, <скрыто>). Можно просмотреть его перед отправкой.'),
+							E('p', {}, 'Скачайте файл или скопируйте текст и отправьте тому, кто помогает с настройкой.'),
+							area,
+							E('div', { 'class': 'right', 'style': 'margin-top:8px' }, [
+								copied, ' ',
+								E('button', { 'class': 'cbi-button', 'click': () => {
+									area.select();
+									const done = () => { copied.textContent = 'Скопировано'; };
+									if (navigator.clipboard && window.isSecureContext)
+										navigator.clipboard.writeText(text).then(done, () => { document.execCommand('copy'); done(); });
+									else { document.execCommand('copy'); done(); }
+								} }, 'Копировать'), ' ',
+								E('button', { 'class': 'cbi-button cbi-button-positive', 'click': () => {
+									const a = E('a', { 'href': URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })), 'download': name });
+									document.body.appendChild(a); a.click(); a.remove();
+								} }, 'Скачать файл'), ' ',
+								E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, 'Закрыть')
+							])
+						]);
+					});
+				});
+			});
+			setTimeout(tick, 2000);
+		}));
+	},
+
 	refresh() {
 		return this.fetchData().then(() => this.draw());
 	},
@@ -622,7 +674,9 @@ return view.extend({
 			E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, () => this.runBg('check', 'Проверка серверов')) }, 'Проверить сейчас'),
 			uci.get('podkop-monitor', 'main', 'subscription_url')
 				? E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, () => this.runBg('sub-update', 'Обновление подписки')) }, 'Обновить подписку')
-				: ''
+				: '',
+			E('button', { 'class': 'cbi-button', 'title': 'Отчёт о работе podkop без личных данных — отправить тому, кто помогает с настройкой',
+				'click': ui.createHandlerFn(this, 'collectDiag') }, 'Диагностика')
 		]);
 		root.appendChild(ranges);
 

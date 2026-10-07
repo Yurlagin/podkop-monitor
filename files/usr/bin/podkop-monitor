@@ -22,6 +22,7 @@ case "$1" in
         # правка секции podkop: <секция> <имя сервера>...
         exec $L/edit.sh "$@" ;;
     upgrade)      exec $L/update.sh upgrade ;;
+    diag)         exec $L/diag.sh ;;
     daily)
         # раз в сутки: подписка → страна YouTube → проверка обновлений пакета
         . $L/common.sh
@@ -37,7 +38,7 @@ case "$1" in
     version)      cat $L/VERSION ;;
     bg)
         # для LuCI: запустить длинную команду в фоне; результат — /tmp/podkop-monitor/<cmd>.log и .rc
-        case "$2" in check|sub-update|sub-update-force|upgrade|apply|remove|add|rename|sync) ;; *) echo "bg: check|sub-update|sub-update-force|upgrade|apply|remove|add|rename|sync"; exit 1 ;; esac
+        case "$2" in check|sub-update|sub-update-force|upgrade|diag|apply|remove|add|rename|sync) ;; *) echo "bg: check|sub-update|sub-update-force|upgrade|diag|apply|remove|add|rename|sync"; exit 1 ;; esac
         R=/tmp/podkop-monitor; mkdir -p $R; rm -f $R/$2.rc
         C=$2; shift 2
         ( $0 "$C" "$@" > $R/$C.log 2>&1; echo $? > $R/$C.rc ) </dev/null >/dev/null 2>&1 &
@@ -60,6 +61,7 @@ case "$1" in
   sync   <секция> <имена для apply>... -- <старое> <новое>...  apply и rename за один перезапуск podkop
   notify-test <токен> <chat_id> [0|1]  тестовое сообщение в Telegram (1 — через прокси podkop)
   notify-chatid <токен> [0|1]          ID чата из последнего сообщения боту
+  diag          собрать диагностику podkop без личных данных (печатает путь к файлу)
   version       показать версию
   bg <cmd> ...  запустить команду в фоне (для LuCI): результат в /tmp/podkop-monitor/<cmd>.log/.rc
 EOF
