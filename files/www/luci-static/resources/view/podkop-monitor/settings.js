@@ -68,6 +68,13 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
+		o = s.taboption('main', form.Flag, 'auto_upgrade', 'Обновлять автоматически',
+			'Сразу ставить новую версию мониторинга, как только она выйдет (раз в сутки, ночью). ' +
+			'Настройки и история сохраняются. Выключите, если хотите обновлять вручную кнопкой на странице мониторинга.');
+		o.default = '1';
+		o.rmempty = false;
+		o.depends('update_check', '1');
+
 		o = s.taboption('advanced', form.Value, 'subscription_ua', 'User-Agent для подписки',
 			'От него зависит формат ответа сервера подписки.');
 		o.default = 'v2rayNG/1.9.30';

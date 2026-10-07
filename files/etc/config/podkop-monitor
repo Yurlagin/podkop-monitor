@@ -12,6 +12,8 @@ config main 'main'
 	option youtube_country '1'
 	# проверять обновления пакета (раз в сутки)
 	option update_check '1'
+	# ставить новую версию мониторинга автоматически (раз в сутки, вместе с проверкой обновлений)
+	option auto_upgrade '1'
 	option repo '@REPO@'
 	# автообновление ссылок в секциях podkop по подписке: off | outdated (только неработающие) | all
 	option auto_update 'off'

@@ -80,7 +80,7 @@ for l in $old; do
   ✎ $n → $nn"
     elif wanted "$n"; then
         case "$MODE" in
-            apply)  l=$(sub_link "$n"); CHANGES="$CHANGES
+            apply|sync)  l=$(sub_link "$n"); CHANGES="$CHANGES
   ↻ $n" ;;
             remove) CHANGES="$CHANGES
   ✕ $n"; continue ;;
@@ -135,11 +135,18 @@ fi
 
 echo "Секция $SEC:$CHANGES"
 echo "Копия прежнего конфига: $PM_STATE/podkop.backup-$ts"
-# PM_NO_RELOAD — вызывающий (автообновление) сам перезапустит podkop один раз после всех секций
+# PM_NO_RELOAD — вызывающий (автообновление) сам применит изменения один раз после всех секций.
+# Применяем быстро — без перезапуска podkop (fastapply.sh); не получилось — обычный podkop reload.
 if [ -z "$PM_NO_RELOAD" ]; then
-    echo "Перезапускаю podkop…"
-    [ -n "$PM_TEST" ] || /etc/init.d/podkop reload >/dev/null 2>&1
-    sleep 5
+    if [ -z "$PM_TEST" ]; then
+        if r=$($PM_LIB/fastapply.sh "$SEC" 2>&1); then
+            echo "$r"
+        else
+            echo "$r"; echo "Применяю перезапуском podkop…"
+            /etc/init.d/podkop reload >/dev/null 2>&1
+            sleep 3
+        fi
+    fi
     $PM_LIB/drift.sh
 fi
 pm_log "$SEC: $MODE$(echo "$CHANGES" | tr '\n' ' ') (бэкап podkop.backup-$ts)"

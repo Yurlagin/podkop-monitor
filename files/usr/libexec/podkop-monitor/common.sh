@@ -21,6 +21,7 @@ config_get PM_PARALLEL main parallel 8
 config_get PM_TIMEOUT main timeout 5000
 config_get PM_YT_COUNTRY main youtube_country 1
 config_get PM_UPDATE_CHECK main update_check 1
+config_get PM_AUTO_UPGRADE main auto_upgrade 1    # ставить новую версию мониторинга сразу, как она выйдет
 config_get PM_REPO main repo ""
 config_get PM_AUTO_UPDATE main auto_update off       # off | outdated | all
 

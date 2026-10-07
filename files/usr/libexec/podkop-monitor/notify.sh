@@ -95,6 +95,13 @@ events() {
         fi
     fi
 
+    # автообновление пыталось, но не смогло
+    if [ "$N_ATTENTION" = 1 ] && [ -s "$PM_RUN/auto-errors" ]; then
+        while IFS='|' read -r sec name why; do
+            printf 'autofail|%s|%s\t⚠️ <b>%s</b>: автообновление не смогло обновить «%s»: %s\n' "$sec" "$name" "$sec" "$(echo "$name" | esc)" "$(echo "$why" | esc)"
+        done < "$PM_RUN/auto-errors"
+    fi
+
     if [ "$N_SUB" = 1 ] && [ -n "$PM_SUB_URL" ] && [ -s "$PM_STATE/sub-status" ]; then
         IFS='|' read -r ok_ts fail_ts err < "$PM_STATE/sub-status"
         if [ "${fail_ts:-0}" -gt "${ok_ts:-0}" ] && [ $((now - ${ok_ts:-0})) -ge $((N_SUB_STALE * 3600)) ]; then
@@ -127,7 +134,7 @@ do_run() {
     now=$(date +%s)
     # порядок в сообщении — по важности
     events "$cur" | sort -u | awk -F'\t' '{ k = $1; sub(/\|.*/, "", k)
-        p = (k == "subwarn") ? 1 : (k == "subfail") ? 2 : (k == "expire") ? 3 : (k == "outdated") ? 4 : (k == "missing") ? 5 : (k == "ambig") ? 6 : 9
+        p = (k == "subwarn") ? 1 : (k == "subfail") ? 2 : (k == "expire") ? 3 : (k == "autofail") ? 4 : (k == "outdated") ? 4 : (k == "missing") ? 5 : (k == "ambig") ? 6 : 9
         print p "\t" $0 }' | sort -n -k1,1 -s | cut -f2- > $T.ev
     [ -f "$STATE" ] || : > "$STATE"
 
@@ -150,7 +157,7 @@ do_run() {
         awk -F'\t' -v k="$key" '$1 == k { f = 1 } END { exit !f }' $T.ev && continue
         case "$key" in
             quota*) ;;
-            missing\|*|outdated\|*|ambig\|*)
+            missing\|*|outdated\|*|ambig\|*|autofail\|*)
                 s=${key#*|}; echo "✅ <b>${s%%|*}</b>: «$(echo "${s#*|}" | esc)» — решено." >> $T.msg ;;
             subwarn) echo "✅ Список серверов подписки снова в порядке." >> $T.msg ;;
             subfail) echo "✅ Подписка снова скачивается." >> $T.msg ;;

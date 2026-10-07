@@ -6,7 +6,7 @@
 . /usr/libexec/podkop-monitor/common.sh
 
 STATE=$PM_RUN/update.json
-API="https://api.github.com/repos/$PM_REPO/releases/latest"
+API="${PM_GH_API:-https://api.github.com}/repos/$PM_REPO/releases/latest"   # PM_GH_API — для тестов
 
 # 1, если версия $1 новее $2 (формат X.Y.Z, допускается префикс v)
 newer() {
@@ -21,7 +21,7 @@ newer() {
 
 fetch_release() {
     [ -n "$PM_REPO" ] || { echo "не задан репозиторий (option repo)" >&2; return 1; }
-    curl -s -L -m 20 -H "Accept: application/vnd.github+json" -A "podkop-monitor/$PM_VERSION" -o $PM_RUN/release.json "$API" \
+    curl -s -L -m 20 --retry 2 --retry-delay 5 --retry-all-errors -H "Accept: application/vnd.github+json" -A "podkop-monitor/$PM_VERSION" -o $PM_RUN/release.json "$API" \
         && jq -e '.tag_name' $PM_RUN/release.json >/dev/null 2>&1
 }
 

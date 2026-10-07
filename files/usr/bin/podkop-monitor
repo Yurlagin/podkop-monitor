@@ -26,7 +26,12 @@ case "$1" in
         # раз в сутки: подписка → страна YouTube → проверка обновлений пакета
         . $L/common.sh
         $0 sub-update
-        [ "$PM_UPDATE_CHECK" = 1 ] && $L/update.sh check
+        if [ "$PM_UPDATE_CHECK" = 1 ] && $L/update.sh check \
+           && [ "$(jq -r '.available' $PM_RUN/update.json 2>/dev/null)" = true ] && [ "$PM_AUTO_UPGRADE" = 1 ]; then
+            # автоматическое обновление мониторинга (настройка «Обновлять автоматически», по умолчанию включена)
+            logger -t podkop-monitor "ставлю новую версию $(jq -r '.latest' $PM_RUN/update.json) автоматически"
+            $L/update.sh upgrade > $PM_RUN/upgrade.log 2>&1; echo $? > $PM_RUN/upgrade.rc
+        fi
         exit 0
         ;;
     version)      cat $L/VERSION ;;

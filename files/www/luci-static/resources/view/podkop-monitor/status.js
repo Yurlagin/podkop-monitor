@@ -209,7 +209,10 @@ return view.extend({
 		const u = this.update;
 		const avail = u && u.available;
 		const checked = u ? `проверено ${dt(u.checked)}` : 'обновления ещё не проверялись';
-		const latest = u && u.latest ? (avail ? `доступна ${esc(u.latest)}` : 'последняя версия') : (u && u.error ? esc(u.error) : '');
+		const auto = uci.get('podkop-monitor', 'main', 'auto_upgrade') !== '0' && uci.get('podkop-monitor', 'main', 'update_check') !== '0';
+		const latest = u && u.latest
+			? (avail ? `доступна ${esc(u.latest)}${auto ? ' — поставится автоматически ночью' : ''}` : 'последняя версия' + (auto ? ' · обновляется автоматически' : ''))
+			: (u && u.error ? esc(u.error) : '');
 		const box = E('div', { 'class': 'pm-card pm-bar' + (avail ? ' pm-update' : '') }, [
 			E('span', {}, [E('strong', {}, 'podkop-monitor ' + this.version)]),
 			E('span', { 'class': avail ? 'pm-warn' : 'pm-muted' }, latest),
