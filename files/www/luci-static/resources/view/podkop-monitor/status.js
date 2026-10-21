@@ -109,7 +109,15 @@ function stats(pts, since) {
 	};
 }
 
-const strip = win => `<div class="pm-strip">${win.map(p =>
+// имя сервера из ссылки — как pm_link_name в common.sh: фрагмент после #, без символов, ломающих CSV
+function linkName(link) {
+	const i = link.indexOf('#');
+	let frag = i >= 0 ? link.slice(i + 1) : link.split('?')[0].split('@').at(-1);
+	try { frag = decodeURIComponent(frag.replace(/\+/g, ' ')); } catch (e) {}
+	return frag.replace(/[,|"\r\n]/g, '');
+}
+
+const strip = win =>`<div class="pm-strip">${win.map(p =>
 	`<i style="background:${C[cls(p[1])]}" title="${dt(p[0])}: ${fmt(p[1])}"></i>`).join('')}</div>`;
 
 return view.extend({
@@ -253,7 +261,30 @@ return view.extend({
 	},
 
 	refresh() {
-		return this.fetchData().then(() => this.draw());
+		// после правки секций состав берётся из конфига podkop — перечитать его
+		uci.unload('podkop');
+		return Promise.all([uci.load('podkop'), this.fetchData()]).then(() => this.draw());
+	},
+
+	// серверы секции по текущему конфигу podkop, в его порядке; null — секция не из ссылок
+	configNames(sec) {
+		const type = uci.get('podkop', sec, 'proxy_config_type');
+		const v = ['urltest', 'selector'].includes(type) ? uci.get('podkop', sec, type + '_proxy_links')
+			: type === 'url' ? uci.get('podkop', sec, 'proxy_string') : null;
+		if (v == null) return null;
+		const links = (Array.isArray(v) ? v : String(v).split(/\s+/)).filter(Boolean);
+		return [...new Set(links.map(linkName))];
+	},
+
+	// текущие серверы секции: по конфигу podkop, а если его не разобрать — по последнему замеру.
+	// Ещё не проверенные (только что добавленные) получают пустую историю; sv.key — номер в конфиге,
+	// как в drift.csv (после удаления номера сдвигаются раньше, чем пройдёт новый замер)
+	currentKeys(sec, s) {
+		const names = this.configNames(sec);
+		if (!names || !names.length)
+			return Object.keys(s.servers).filter(n => s.servers[n].lastTs >= s.lastTs).sort((a, b) => s.servers[a].key - s.servers[b].key);
+		names.forEach((n, i) => { (s.servers[n] ??= { name: n, pts: {}, lastTs: 0 }).key = i + 1; });
+		return names;
 	},
 
 	// --- отрисовка ---
@@ -401,7 +432,7 @@ return view.extend({
 
 	confirmRemove(sec, s) {
 		const names = [...(this.sel[sec] || [])];
-		const all = Object.values(s.servers).filter(v => v.lastTs >= s.lastTs).length;
+		const all = this.currentKeys(sec, s).length;
 		const cur = s.now.at(-1)?.[1];
 		if (names.length >= all)
 			return ui.addNotification(null, E('p', {}, 'Нельзя убрать из секции все серверы — podkop не запустится. Оставьте хотя бы один.'), 'warning');
@@ -432,8 +463,8 @@ return view.extend({
 		const main = this.sectionMain(sec);
 		const targets = s.targets.slice().sort((a, b) => (a === main) - (b === main) || a.localeCompare(b));
 		const cur = s.now.at(-1);
-		// текущие серверы секции (есть в последнем замере) в порядке podkop
-		const keys = Object.keys(s.servers).filter(n => s.servers[n].lastTs >= s.lastTs).sort((a, b) => s.servers[a].key - s.servers[b].key);
+		// текущие серверы секции в порядке podkop
+		const keys = this.currentKeys(sec, s);
 		const sel = this.sel[sec] ??= new Set();
 		[...sel].forEach(n => keys.includes(n) || sel.delete(n));
 		const editable = ['urltest', 'selector'].includes(uci.get('podkop', sec, 'proxy_config_type'));
@@ -530,7 +561,7 @@ return view.extend({
 	// секции podkop, где сейчас стоит сервер с таким именем
 	sectionsOf(name) {
 		const out = Object.entries(this.data)
-			.filter(([sec, d]) => sec !== SUB && d.servers[name] && d.servers[name].lastTs >= d.lastTs)
+			.filter(([sec, d]) => sec !== SUB && this.currentKeys(sec, d).includes(name))
 			.map(([sec]) => sec);
 		// тот же сервер стоит в секции под старым именем (провайдер переименовал)
 		for (const [sec, ds] of Object.entries(this.drift || {}))
