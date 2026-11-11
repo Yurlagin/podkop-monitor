@@ -15,6 +15,7 @@ config_get PM_INTERVAL main interval 15
 config_get PM_KEEP_DAYS main keep_days 7
 config_get PM_SUB_URL main subscription_url ""
 config_get PM_SUB_UA main subscription_ua "v2rayNG/1.9.30"
+config_get PM_SUB_HWID main subscription_hwid ""  # создаётся при первом обновлении подписки (sub-update.sh)
 config_get PM_HELPER_PORT main helper_port 9092
 config_get PM_BASE_PORT main base_port 32000
 config_get PM_PARALLEL main parallel 8

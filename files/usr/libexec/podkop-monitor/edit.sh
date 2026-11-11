@@ -3,6 +3,7 @@
 #   edit.sh apply  <секция> <имя>...   — заменить ссылки ссылками одноимённых серверов из подписки
 #   edit.sh remove <секция> <имя>...   — убрать серверы из секции
 #   edit.sh add    <секция> <имя>...   — добавить серверы подписки в конец секции
+#                                       (секцию с одним сервером, тип url, переводит в urltest)
 #   edit.sh rename <секция> <старое> <новое> [<старое> <новое>...]
 #                                       — сменить только имя (фрагмент после #), параметры подключения не трогаются;
 #                                         история замеров переносится на новое имя
@@ -37,7 +38,8 @@ renamed_to() { awk -F'\t' -v o="$1" '$1 == o { print $2; exit }' $REN; }
 ptype=$(uci -q get podkop.$SEC.proxy_config_type)
 case "$ptype" in
     urltest|selector) opt="${ptype}_proxy_links" ;;
-    url) case "$MODE" in apply|rename|sync) ;; *) echo "В секции типа url один сервер — удалять и добавлять нечего"; exit 1 ;; esac
+    # в секции типа url один сервер; добавление переводит её в urltest (текущий сервер остаётся первым)
+    url) case "$MODE" in remove) echo "В секции $SEC один сервер — удалять нечего"; exit 1 ;; esac
          opt=proxy_string ;;
     *) echo "Секция $SEC: тип «$ptype» не поддерживается"; exit 1 ;;
 esac
@@ -110,7 +112,18 @@ ts=$(date +%Y%m%d-%H%M%S)
 cp /etc/config/podkop "$PM_STATE/podkop.backup-$ts"
 ls -1t "$PM_STATE"/podkop.backup-* 2>/dev/null | tail -n +6 | xargs -r rm -f
 
-if [ "$opt" = proxy_string ]; then
+if [ "$opt" = proxy_string ] && [ "$MODE" = add ]; then
+    # url → urltest: параметры проверки — те же умолчания, что у podkop, но явно, чтобы их было видно в LuCI podkop
+    uci set "podkop.$SEC.proxy_config_type=urltest"
+    uci -q delete "podkop.$SEC.proxy_string"
+    uci -q delete "podkop.$SEC.urltest_proxy_links"   # остатки, если тип секции раньше меняли вручную
+    for o in urltest_check_interval=3m urltest_tolerance=50 urltest_testing_url=https://www.gstatic.com/generate_204; do
+        [ -n "$(uci -q get "podkop.$SEC.${o%%=*}")" ] || uci set "podkop.$SEC.$o"
+    done
+    for l in $new; do uci add_list "podkop.$SEC.urltest_proxy_links=$l"; done
+    CHANGES="$CHANGES
+  секция переведена на автовыбор (urltest)"
+elif [ "$opt" = proxy_string ]; then
     uci set "podkop.$SEC.proxy_string=${new# }"
 else
     uci delete "podkop.$SEC.$opt"

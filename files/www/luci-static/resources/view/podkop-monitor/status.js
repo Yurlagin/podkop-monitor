@@ -601,6 +601,8 @@ return view.extend({
 			return ui.addNotification(null, E('p', {}, `Все отмеченные серверы уже есть в секции ${sec}.`), 'info');
 		this.pickDialog(`Добавить серверы в секцию ${sec}?`,
 			`Отмеченные серверы будут добавлены в конец секции ${sec} ссылками из подписки.` +
+				(uci.get('podkop', sec, 'proxy_config_type') === 'url'
+					? ` Сейчас в секции один сервер — она будет переведена на автовыбор (urltest), текущий сервер останется первым.` : '') +
 				(already.length ? ` Уже есть в секции и будут пропущены: ${already.join(', ')}.` : ''),
 			items, 'Добавить',
 			picked => { this.sel[SUB] = new Set(); this.runBg('add', `Добавление в секцию ${sec}`, false, [sec].concat(picked)); });
@@ -622,7 +624,8 @@ return view.extend({
 		[...sel].forEach(n => live.includes(n) || sel.delete(n));
 		const yt = uci.get('podkop-monitor', 'main', 'youtube_country') !== '0';
 		const secs = uci.sections('podkop', 'section')
-			.filter(x => x.connection_type === 'proxy' && ['urltest', 'selector'].includes(x.proxy_config_type))
+			// любая секция со ссылками; в секцию с одним сервером (url) добавление переводит её в urltest
+			.filter(x => x.connection_type === 'proxy' && ['urltest', 'selector', 'url'].includes(x.proxy_config_type))
 			.map(x => x['.name']);
 		const th = (t, label) => `<th class="pm-sort${sortBy === t ? ' on' : ''}" data-sort="${esc(t)}" title="Сортировать">${esc(label || t)}${sortBy === t ? ' ▲' : ''}</th>`;
 

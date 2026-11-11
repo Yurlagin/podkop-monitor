@@ -48,6 +48,7 @@ if [ -n "$PM_SUB_URL" ]; then
 fi
 [ -s "$PM_STATE/sub.url" ] && echo "S	$(cat "$PM_STATE/sub.url")" >> $SEC
 for o in bot_token chat_id; do v=$(uci -q get podkop-monitor.notify.$o) && echo "S	$v" >> $SEC; done
+v=$(uci -q get podkop-monitor.main.subscription_hwid) && echo "S	$v" >> $SEC
 v=$(uci -q get podkop.settings.yacd_secret_key) && echo "S	$v" >> $SEC
 v=$(uci -q get system.@system[0].hostname) && case "$v" in OpenWrt|'') ;; *) echo "S	$v" >> $SEC ;; esac
 # длинные значения — первыми: иначе часть длинного заменится раньше целого

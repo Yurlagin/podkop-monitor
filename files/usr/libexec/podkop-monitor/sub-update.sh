@@ -23,8 +23,39 @@ sub_fail() {
     exit 1
 }
 
-code=$(curl -s -L -m 30 -A "$PM_SUB_UA" -D $TMP.hdr -o $TMP.raw -w "%{http_code}" "$PM_SUB_URL")
+# HWID — постоянный идентификатор роутера. Провайдеры на Remnawave с ограничением числа устройств
+# без него отдают заглушку вместо серверов; первый запрос с ним привязывает роутер к подписке.
+# Создаётся один раз и хранится в конфиге (переживает обновления, попадает в бэкап настроек).
+if [ -z "$PM_SUB_HWID" ]; then
+    PM_SUB_HWID=$(cat /proc/sys/kernel/random/uuid)
+    uci set podkop-monitor.main.subscription_hwid="$PM_SUB_HWID" && uci commit podkop-monitor
+    pm_log "подписка: создан HWID роутера $PM_SUB_HWID"
+fi
+os_ver=$(. /etc/openwrt_release 2>/dev/null; echo "OpenWrt ${DISTRIB_RELEASE:-?}")
+model=$(tr -cd '[:print:]' < /tmp/sysinfo/model 2>/dev/null)
+
+code=$(curl -s -L -m 30 -A "$PM_SUB_UA" -H "x-hwid: $PM_SUB_HWID" -H "x-device-os: Linux" \
+            -H "x-ver-os: $os_ver" -H "x-device-model: ${model:-OpenWrt router}" \
+            -D $TMP.hdr -o $TMP.raw -w "%{http_code}" "$PM_SUB_URL")
 [ "$code" = 200 ] || sub_fail "HTTP $code"
+
+# Заглушка Remnawave (HWID не передан, лимит устройств, подписка неактивна…): одна фиктивная запись
+# с нулевым UUID на 0.0.0.0, причина — в её имени. Это не новый список серверов, а ошибка скачивания.
+ZERO=00000000-0000-0000-0000-000000000000
+stub=
+if jq -e . $TMP.raw >/dev/null 2>&1; then
+    grep -q "$ZERO" $TMP.raw && stub=$(jq -r '(if type == "array" then .[0] else . end).remarks // "без описания"' $TMP.raw)
+else
+    l=$({ grep -q "://" $TMP.raw && cat $TMP.raw || base64 -d < $TMP.raw 2>/dev/null; } | tr -d '\r' | grep -m1 "$ZERO@")
+    [ -n "$l" ] && stub=$(pm_link_name "$l")
+fi
+if [ -n "$stub" ]; then
+    rm -f $PM_STATE/sub-warning $PM_RUN/sub-warning  # «серверов стало 1» из-за заглушки — не то, о чём стоит предупреждать
+    case "$stub" in
+        *HWID*|*[Уу]стройств*) sub_fail "провайдер вернул заглушку «$stub» — проверьте привязанные устройства в личном кабинете или боте провайдера (HWID роутера: $PM_SUB_HWID)" ;;
+        *) sub_fail "провайдер вернул заглушку «$stub» вместо серверов" ;;
+    esac
+fi
 # трафик и срок подписки из заголовка subscription-userinfo: «upload|download|total|expire»
 grep -i '^subscription-userinfo:' $TMP.hdr | tail -1 | tr -d '\r' | sed 's/^[^:]*://' | tr ';' '\n' \
     | awk -F= '{ k = $1; gsub(/ /, "", k); if (k != "") { v[k] = $2 + 0; n++ } }
